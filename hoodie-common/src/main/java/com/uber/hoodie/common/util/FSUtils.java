@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import com.uber.hoodie.common.model.HoodieLogFile;
 import com.uber.hoodie.common.model.HoodiePartitionMetadata;
 import com.uber.hoodie.common.table.timeline.HoodieInstant;
+import com.uber.hoodie.exception.HoodieException;
 import com.uber.hoodie.exception.HoodieIOException;
 import com.uber.hoodie.exception.InvalidHoodiePathException;
 import org.apache.hadoop.conf.Configuration;
@@ -35,6 +36,8 @@ import org.apache.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -67,24 +70,26 @@ public class FSUtils {
     }
 
 
-    public static FileSystem getFs() {
-        if (fs != null) {
-            return fs;
-        }
-        Configuration conf = new Configuration();
-        conf.set("fs.hdfs.impl", org.apache.hadoop.hdfs.DistributedFileSystem.class.getName());
-        conf.set("fs.file.impl", org.apache.hadoop.fs.LocalFileSystem.class.getName());
+    public static Configuration getConf() {
+        return new Configuration();
+    }
+
+    public static FileSystem getFs(Path path) {
         FileSystem fs;
         try {
-            fs = FileSystem.get(conf);
+            fs = path.getFileSystem(new Configuration());
         } catch (IOException e) {
             throw new HoodieIOException("Failed to get instance of " + FileSystem.class.getName(),
                     e);
         }
-        LOG.info(String.format("Hadoop Configuration: fs.defaultFS: [%s], Config:[%s], FileSystem: [%s]",
+        Configuration conf = fs.getConf();
+        LOG.debug(String.format("Hadoop Configuration: fs.defaultFS: [%s], Config:[%s], FileSystem: [%s]",
                 conf.getRaw("fs.defaultFS"), conf.toString(), fs.toString()));
-
         return fs;
+    }
+
+    public static FileSystem getFs(String path) {
+        return getFs(new Path(path));
     }
 
     public static String makeDataFileName(String commitTime, int taskPartitionId, String fileId) {
@@ -112,6 +117,7 @@ public class FSUtils {
     }
 
     public static long getFileSize(FileSystem fs, Path path) throws IOException {
+//        return fs.getContentSummary(path).getLength();
         return fs.getFileStatus(path).getLen();
     }
 

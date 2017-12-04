@@ -140,9 +140,6 @@ public interface HoodieLogFormat {
 
     public Writer build() throws IOException, InterruptedException {
       log.info("Building HoodieLogFormat Writer");
-      if (fs == null) {
-        fs = FSUtils.getFs();
-      }
       if (logFileId == null) {
         throw new IllegalArgumentException("FileID is not specified");
       }
@@ -162,6 +159,9 @@ public interface HoodieLogFormat {
         log.info(
             "Computed the next log version for " + logFileId + " in " + parentPath + " as "
                 + logVersion);
+      }
+      if (fs == null) {
+        fs = FSUtils.getFs(parentPath);
       }
 
       Path logPath = new Path(parentPath,

@@ -21,6 +21,8 @@ import com.uber.hoodie.common.table.HoodieTableMetaClient;
 import com.uber.hoodie.common.table.HoodieTimeline;
 import com.uber.hoodie.common.table.timeline.HoodieActiveTimeline;
 import com.uber.hoodie.common.table.timeline.HoodieInstant;
+import com.uber.hoodie.common.util.FSUtils;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.junit.After;
 import org.junit.Before;
@@ -37,17 +39,22 @@ import static org.junit.Assert.*;
 public class HoodieActiveTimelineTest {
     private HoodieActiveTimeline timeline;
     private HoodieTableMetaClient metaClient;
+    private FileSystem fs;
+
     @Rule
     public final ExpectedException exception = ExpectedException.none();
 
     @Before
     public void setUp() throws Exception {
         this.metaClient = HoodieTestUtils.initOnTemp();
+        fs = FSUtils.getFs(this.metaClient.getBasePath());
     }
 
     @After
     public void tearDown() throws Exception {
-        HoodieTestUtils.fs.delete(new Path(this.metaClient.getBasePath()), true);
+        FileSystem fs = FSUtils.getFs(this.metaClient.getBasePath());
+
+        fs.delete(new Path(this.metaClient.getBasePath()), true);
     }
 
     @Test
@@ -72,7 +79,7 @@ public class HoodieActiveTimelineTest {
         HoodieInstant instant5 =
             new HoodieInstant(true, HoodieTimeline.COMMIT_ACTION, "9");
 
-        timeline = new HoodieActiveTimeline(HoodieTestUtils.fs, metaClient.getMetaPath());
+        timeline = new HoodieActiveTimeline(fs, metaClient.getMetaPath());
         timeline.saveAsComplete(instant1, Optional.empty());
         timeline.saveAsComplete(instant2, Optional.empty());
         timeline.saveAsComplete(instant3, Optional.empty());
@@ -96,7 +103,7 @@ public class HoodieActiveTimelineTest {
 
     @Test
     public void testTimelineOperationsBasic() throws Exception {
-        timeline = new HoodieActiveTimeline(HoodieTestUtils.fs, metaClient.getMetaPath());
+        timeline = new HoodieActiveTimeline(fs, metaClient.getMetaPath());
         assertTrue(timeline.empty());
         assertEquals("", 0, timeline.countInstants());
         assertEquals("", Optional.empty(), timeline.firstInstant());

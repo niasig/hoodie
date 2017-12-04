@@ -26,6 +26,8 @@ import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Progressable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -45,6 +47,8 @@ import java.util.concurrent.ConcurrentMap;
  * written size to each of the open streams.
  */
 public class HoodieWrapperFileSystem extends FileSystem {
+    private static final Logger logger = LoggerFactory.getLogger(HoodieWrapperFileSystem.class);
+
     private static final Set<String> SUPPORT_SCHEMES;
     public static final String HOODIE_SCHEME_PREFIX = "hoodie-";
 
@@ -53,25 +57,36 @@ public class HoodieWrapperFileSystem extends FileSystem {
         SUPPORT_SCHEMES.add("file");
         SUPPORT_SCHEMES.add("hdfs");
         SUPPORT_SCHEMES.add("s3");
+        SUPPORT_SCHEMES.add("s3n");
 
         // Hoodie currently relies on underlying object store being fully
         // consistent so only regional buckets should be used.
         SUPPORT_SCHEMES.add("gs");
         SUPPORT_SCHEMES.add("viewfs");
     }
+    private static final Map<String, FileSystem> fileSystems = new ConcurrentHashMap<>();
 
     private ConcurrentMap<String, SizeAwareFSDataOutputStream> openStreams =
         new ConcurrentHashMap<>();
     private FileSystem fileSystem;
     private URI uri;
+    private FileContext fileContext;
+    private Configuration conf;
+    private boolean closed = false;
 
-    @Override public void initialize(URI uri, Configuration conf) throws IOException {
-        // Get the default filesystem to decorate
-        fileSystem = FileSystem.get(conf);
-        // Do not need to explicitly initialize the default filesystem, its done already in the above FileSystem.get
-        // fileSystem.initialize(FileSystem.getDefaultUri(conf), conf);
-        // fileSystem.setConf(conf);
+    @Override public synchronized void initialize(URI uri, Configuration conf) throws IOException {
         this.uri = uri;
+        this.conf = conf;
+        // Get the default filesystem to decorate
+        URI realUri = URI.create(uri.toString().replaceFirst("^" + HOODIE_SCHEME_PREFIX, ""));
+        logger.debug("initialize: uri map {} = {}", uri, realUri);
+        fileSystem = FileSystem.get(realUri, conf);
+        fileContext = FileContext.getFileContext(realUri, conf);
+        logger.debug("initialize: {} => {}", realUri, fileSystem.getClass().getCanonicalName());
+        // Do not need to explicitly initialize the default filesystem, its done already in the above FileSystem.get
+//         fileSystem.initialize(realUri, conf);
+//         fileSystem.setConf(conf);
+        super.initialize(uri, conf);
     }
 
     @Override public URI getUri() {
@@ -108,7 +123,21 @@ public class HoodieWrapperFileSystem extends FileSystem {
     }
 
     @Override public FSDataOutputStream create(Path f, boolean overwrite) throws IOException {
-        return wrapOutputStream(f, fileSystem.create(convertToDefaultPath(f), overwrite));
+        if (closed) {
+            throw new IllegalStateException("create: already closed");
+        }
+        logger.debug("create: {} {} overwrite {}", f, overwrite);
+        Path newPath = convertToDefaultPath(f);
+        logger.debug("create: {} => {} overwrite {}", f, newPath, overwrite);
+        try {
+            FSDataOutputStream ret = wrapOutputStream(f, fileSystem.create(newPath, overwrite));
+            logger.debug("create: completed {} => {} overwrite {}", f, newPath, overwrite);
+            return ret;
+        } catch (Exception e) {
+            logger.error("create: {} path {} uri {} {} ", this, f,
+                    this.fileSystem.getClass().getCanonicalName(), e);
+            throw e;
+        }
     }
 
     @Override public FSDataOutputStream create(Path f) throws IOException {
@@ -179,7 +208,8 @@ public class HoodieWrapperFileSystem extends FileSystem {
     }
 
     @Override public boolean rename(Path src, Path dst) throws IOException {
-        return fileSystem.rename(convertToDefaultPath(src), convertToDefaultPath(dst));
+        fileContext.rename(src, dst, Options.Rename.OVERWRITE);
+        return true;
     }
 
     @Override public boolean delete(Path f, boolean recursive) throws IOException {
@@ -450,7 +480,9 @@ public class HoodieWrapperFileSystem extends FileSystem {
     }
 
     @Override public void close() throws IOException {
-        fileSystem.close();
+        logger.error("close called {}", this);
+//        closed = true;
+//        fileSystem.close();
     }
 
     @Override public long getUsed() throws IOException {
@@ -628,16 +660,31 @@ public class HoodieWrapperFileSystem extends FileSystem {
     }
 
     public Path convertToHoodiePath(Path oldPath) {
-        return convertPathWithScheme(oldPath, getHoodieScheme(fileSystem.getScheme()));
+        return convertToHoodiePath(oldPath, fileSystem.getConf());
     }
 
     public static Path convertToHoodiePath(Path file, Configuration conf) {
-        String scheme = FileSystem.getDefaultUri(conf).getScheme();
+        try {
+            String scheme = file.getFileSystem(conf).getScheme();
         return convertPathWithScheme(file, getHoodieScheme(scheme));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private Path convertToDefaultPath(Path oldPath) {
-        return convertPathWithScheme(oldPath, fileSystem.getScheme());
+        try {
+            String newScheme = oldPath
+                    .getFileSystem(conf)
+                    .getScheme()
+                    .replaceFirst(HOODIE_SCHEME_PREFIX, "");
+            Path newPath = convertPathWithScheme(oldPath, newScheme);
+            logger.debug("convertToDefaultPath: {} => {}", oldPath, newPath);
+            return newPath;
+        } catch (Exception e) {
+            logger.error("convertToDefaultPath: {}", oldPath, e);
+            throw new RuntimeException(oldPath.toString(), e);
+        }
     }
 
     private Path[] convertDefaults(Path[] psrcs) {
@@ -654,6 +701,7 @@ public class HoodieWrapperFileSystem extends FileSystem {
         try {
             newURI = new URI(newScheme, oldURI.getUserInfo(), oldURI.getHost(), oldURI.getPort(),
                 oldURI.getPath(), oldURI.getQuery(), oldURI.getFragment());
+            logger.debug("convertPathWithScheme: {} => {}", oldURI, newURI);
             return new Path(newURI);
         } catch (URISyntaxException e) {
             // TODO - Better Exception handling
@@ -663,9 +711,14 @@ public class HoodieWrapperFileSystem extends FileSystem {
 
     public static String getHoodieScheme(String scheme) {
         String newScheme;
-        if (SUPPORT_SCHEMES.contains(scheme)) {
+        if (scheme.startsWith(HOODIE_SCHEME_PREFIX)) {
+            newScheme = scheme;
+            logger.debug("getHoodieScheme: hoodie already {}", scheme);
+        } else if (SUPPORT_SCHEMES.contains(scheme)) {
             newScheme = HOODIE_SCHEME_PREFIX + scheme;
+            logger.debug("getHoodieScheme: supported {} => {}", scheme, newScheme);
         } else {
+            logger.error("getHoodieScheme: {} not supported", scheme);
             throw new IllegalArgumentException(
                 "BlockAlignedAvroParquetWriter does not support scheme " + scheme);
         }

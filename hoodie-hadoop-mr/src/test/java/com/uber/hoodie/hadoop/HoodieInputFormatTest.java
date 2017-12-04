@@ -20,6 +20,7 @@ import com.uber.hoodie.common.util.FSUtils;
 import org.apache.avro.Schema;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.io.ArrayWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.*;
 import org.junit.Before;
 import org.junit.Rule;

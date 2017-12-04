@@ -75,12 +75,11 @@ import static org.junit.Assert.*;
 public class TestHoodieBloomIndex {
     private JavaSparkContext jsc = null;
     private String basePath = null;
-    private transient final FileSystem fs;
+    private transient FileSystem fs;
     private String schemaStr;
     private Schema schema;
 
     public TestHoodieBloomIndex() throws Exception {
-        fs = FSUtils.getFs();
     }
 
     @Before
@@ -95,6 +94,7 @@ public class TestHoodieBloomIndex {
         // We have some records to be tagged (two different partitions)
         schemaStr = IOUtils.toString(getClass().getResourceAsStream("/exampleSchema.txt"), "UTF-8");
         schema = HoodieAvroUtils.addMetadataFields(new Schema.Parser().parse(schemaStr));
+        fs = FSUtils.getFs(basePath);
     }
 
     @Test

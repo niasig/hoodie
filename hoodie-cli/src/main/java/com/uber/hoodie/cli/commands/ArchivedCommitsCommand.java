@@ -27,6 +27,7 @@ import com.uber.hoodie.common.util.FSUtils;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.springframework.shell.core.CommandMarker;
 import org.springframework.shell.core.annotation.CliAvailabilityIndicator;
@@ -53,11 +54,13 @@ public class ArchivedCommitsCommand implements CommandMarker {
             final Integer limit) throws IOException {
 
         System.out.println("===============> Showing only " + limit + " archived commits <===============");
-        FileStatus [] fsStatuses = FSUtils.getFs().globStatus(new Path(HoodieCLI.tableMetadata.getBasePath() + "/.hoodie/.commits_.archive*"));
+        FileSystem fs1 = FSUtils.getFs(HoodieCLI.tableMetadata.getBasePath());
+        FileStatus [] fsStatuses = fs1.globStatus(new Path(HoodieCLI.tableMetadata.getBasePath() +
+                "/.hoodie/.commits_.archive*"));
         List<String[]> allCommits = new ArrayList<>();
         for(FileStatus fs : fsStatuses) {
             //read the archived file
-            HoodieLogFormat.Reader reader = HoodieLogFormat.newReader(FSUtils.getFs(),
+            HoodieLogFormat.Reader reader = HoodieLogFormat.newReader(fs1,
                     new HoodieLogFile(fs.getPath()), HoodieArchivedMetaEntry.getClassSchema());
 
             List<IndexedRecord> readRecords = new ArrayList<>();

@@ -50,7 +50,7 @@ public class HoodieStorageWriterFactory {
         HoodieParquetConfig parquetConfig =
             new HoodieParquetConfig(writeSupport, CompressionCodecName.GZIP,
                 config.getParquetBlockSize(), config.getParquetPageSize(),
-                config.getParquetMaxFileSize(), FSUtils.getFs().getConf());
+                config.getParquetMaxFileSize(), FSUtils.getFs(config.getBasePath()).getConf());
 
         return new HoodieParquetWriter<>(commitTime, path, parquetConfig, schema);
     }

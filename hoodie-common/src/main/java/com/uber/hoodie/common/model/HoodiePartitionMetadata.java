@@ -16,16 +16,23 @@
 
 package com.uber.hoodie.common.model;
 
+import com.uber.hoodie.common.util.FSUtils;
 import com.uber.hoodie.exception.HoodieException;
 
+import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
+import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.hadoop.fs.UnsupportedFileSystemException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.Properties;
 
 /**
@@ -49,7 +56,7 @@ public class HoodiePartitionMetadata {
 
     private final FileSystem fs;
 
-    private static Logger log = LogManager.getLogger(HoodiePartitionMetadata.class);
+    private static Logger log = LoggerFactory.getLogger(HoodiePartitionMetadata.class);
 
 
     /**
@@ -86,28 +93,46 @@ public class HoodiePartitionMetadata {
         Path tmpMetaPath = new Path(partitionPath, HoodiePartitionMetadata.HOODIE_PARTITION_METAFILE + "_" + taskPartitionId);
         Path metaPath = new Path(partitionPath, HoodiePartitionMetadata.HOODIE_PARTITION_METAFILE);
         boolean metafileExists = false;
+        boolean isS3 = fs.getScheme().toLowerCase().startsWith("s3");
 
         try {
             metafileExists = fs.exists(metaPath);
             if (!metafileExists) {
-                // write to temporary file
-                FSDataOutputStream os = fs.create(tmpMetaPath, true);
-                props.store(os, "partition metadata");
-                os.hsync();
-                os.hflush();
-                os.close();
+                if (!isS3) {
+                    // write to temporary file
+                    FSDataOutputStream os = fs.create(tmpMetaPath, true);
+                    props.store(os, "partition metadata");
+                    os.hsync();
+                    os.hflush();
+                    os.close();
 
-                // move to actual path
-                fs.rename(tmpMetaPath, metaPath);
+                    // move to actual path
+                    fs.rename(tmpMetaPath, metaPath);
+                } else {
+                    FSDataOutputStream os = fs.create(metaPath, true);
+                    props.store(os, "partition metadata");
+                    os.hsync();
+                    os.hflush();
+                    os.close();
+                }
             }
-        } catch (IOException ioe) {
-            log.warn("Error trying to save partition metadata (this is okay, as long as atleast 1 of these succced), " +
-                    partitionPath, ioe);
+        } catch (Exception e) {
+            try {
+                if (!fs.exists(metaPath)) {
+                    log.warn("Error trying to save partition metadata (this is okay, as long as atleast 1 of these succced), " +
+                            partitionPath, e);
+                    throw new RuntimeException(e);
+                }
+            } catch (IOException e1) {
+                log.warn("Error checking partition path existence, {}", partitionPath, e);
+                throw new RuntimeException(e1);
+            }
         } finally {
-            if (!metafileExists) {
+            if (!metafileExists && !isS3) {
                 try {
                     // clean up tmp file, if still lying around
                     if (fs.exists(tmpMetaPath)) {
+                        log.warn("trySave: tmp still exists {}", tmpMetaPath);
                         fs.delete(tmpMetaPath, false);
                     }
                 } catch (IOException ioe) {

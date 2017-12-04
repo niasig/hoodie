@@ -79,7 +79,7 @@ public class HoodieMergeOnReadTestUtils {
         List<Schema.Field> fields = schema.getFields();
         String names = fields.stream().map(f -> f.name().toString()).collect(Collectors.joining(","));
         String postions = fields.stream().map(f -> String.valueOf(f.pos())).collect(Collectors.joining(","));
-        Configuration conf = FSUtils.getFs().getConf();
+        Configuration conf = FSUtils.getConf();
         jobConf.set(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, names);
         jobConf.set(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR, postions);
         jobConf.set("partition_columns", "datestr");

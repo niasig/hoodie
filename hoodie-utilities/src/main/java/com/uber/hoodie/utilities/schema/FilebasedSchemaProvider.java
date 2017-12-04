@@ -51,7 +51,7 @@ public class FilebasedSchemaProvider extends SchemaProvider {
 
     public FilebasedSchemaProvider(PropertiesConfiguration config) {
         super(config);
-        this.fs = FSUtils.getFs();
+        this.fs = FSUtils.getFs(config.getBasePath());
 
         DataSourceUtils.checkRequiredProperties(config, Arrays.asList(Config.SOURCE_SCHEMA_FILE_PROP, Config.TARGET_SCHEMA_FILE_PROP));
         try {

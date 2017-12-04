@@ -21,12 +21,19 @@ import com.google.common.collect.Sets;
 import com.uber.hoodie.common.table.HoodieTableMetaClient;
 import com.uber.hoodie.common.table.HoodieTimeline;
 import com.uber.hoodie.common.util.FSUtils;
+import com.uber.hoodie.exception.HoodieException;
 import com.uber.hoodie.exception.HoodieIOException;
+
 import java.util.Date;
+
 import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -36,6 +43,7 @@ import java.io.Serializable;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -53,14 +61,15 @@ import java.util.stream.Stream;
  * <p></p>
  * This class can be serialized and de-serialized and on de-serialization the FileSystem is re-initialized.
  */
-public class HoodieActiveTimeline extends HoodieDefaultTimeline {
+public final class HoodieActiveTimeline extends HoodieDefaultTimeline {
     public static final SimpleDateFormat COMMIT_FORMATTER = new SimpleDateFormat("yyyyMMddHHmmss");
 
 
     private final transient static Logger log = LogManager.getLogger(HoodieActiveTimeline.class);
-    private String metaPath;
+    private transient FileContext fileContext;
     private transient FileSystem fs;
-
+    private String metaPath;
+    private boolean isS3;
 
     /**
      * Returns next commit time in the {@link #COMMIT_FORMATTER} format.
@@ -73,6 +82,7 @@ public class HoodieActiveTimeline extends HoodieDefaultTimeline {
     protected HoodieActiveTimeline(FileSystem fs, String metaPath, String[] includedExtensions) {
         // Filter all the filter in the metapath and include only the extensions passed and
         // convert them into HoodieInstant
+        this.isS3 = fs.getScheme().toLowerCase().startsWith("s3");
         try {
             this.instants =
                 Arrays.stream(HoodieTableMetaClient.scanFiles(fs, new Path(metaPath), path -> {
@@ -85,8 +95,9 @@ public class HoodieActiveTimeline extends HoodieDefaultTimeline {
                     // create HoodieInstantMarkers from FileStatus, which extracts properties
                     .map(HoodieInstant::new).collect(Collectors.toList());
             log.info("Loaded instants " + instants);
-        } catch (IOException e) {
-            throw new HoodieIOException("Failed to scan metadata", e);
+            this.fileContext = FileContext.getFileContext(fs.getUri(), fs.getConf());
+        } catch (Exception e) {
+            throw new HoodieException("Failed to scan metadata", e);
         }
         this.fs = fs;
         this.metaPath = metaPath;
@@ -117,7 +128,8 @@ public class HoodieActiveTimeline extends HoodieDefaultTimeline {
     private void readObject(java.io.ObjectInputStream in)
         throws IOException, ClassNotFoundException {
         in.defaultReadObject();
-        this.fs = FSUtils.getFs();
+        this.fs = FSUtils.getFs(metaPath);
+        this.fileContext = FileContext.getFileContext(fs.getUri(), fs.getConf());
     }
 
     /**
@@ -238,7 +250,7 @@ public class HoodieActiveTimeline extends HoodieDefaultTimeline {
         log.info("Deleting in-flight " + instant);
         Path inFlightCommitFilePath = new Path(metaPath, instant.getFileName());
         try {
-            boolean result = fs.delete(inFlightCommitFilePath, false);
+            boolean result = fileContext.delete(inFlightCommitFilePath, false);
             if (result) {
                 log.info("Removed in-flight " + instant);
             } else {
@@ -263,11 +275,11 @@ public class HoodieActiveTimeline extends HoodieDefaultTimeline {
         try {
             // open a new file and write the commit metadata in
             Path inflightCommitFile = new Path(metaPath, inflight.getFileName());
-            createFileInMetaPath(inflight.getFileName(), data);
-            boolean success = fs.rename(inflightCommitFile, commitFilePath);
-            if (!success) {
-                throw new HoodieIOException(
-                    "Could not rename " + inflightCommitFile + " to " + commitFilePath);
+            if (!isS3) {
+                createFileInMetaPath(inflight.getFileName(), data);
+                fileContext.rename(inflightCommitFile, commitFilePath, Options.Rename.OVERWRITE);
+            } else {
+                createFileInMetaPath(completed.getFileName(), data);
             }
         } catch (IOException e) {
             throw new HoodieIOException("Could not complete " + inflight, e);
@@ -277,12 +289,12 @@ public class HoodieActiveTimeline extends HoodieDefaultTimeline {
     protected void moveCompleteToInflight(HoodieInstant completed, HoodieInstant inflight) {
         Path inFlightCommitFilePath = new Path(metaPath, inflight.getFileName());
         try {
-            if (!fs.exists(inFlightCommitFilePath)) {
+            if (!fileContext.util().exists(inFlightCommitFilePath)) {
                 Path commitFilePath = new Path(metaPath, completed.getFileName());
-                boolean success = fs.rename(commitFilePath, inFlightCommitFilePath);
-                if (!success) {
-                    throw new HoodieIOException(
-                        "Could not rename " + commitFilePath + " to " + inFlightCommitFilePath);
+                if (!isS3) {
+                    fileContext.rename(commitFilePath, inFlightCommitFilePath, Options.Rename.OVERWRITE);
+                } else {
+                    FileUtil.copy(fs, commitFilePath, fs, inFlightCommitFilePath, true, fs.getConf());
                 }
             }
         } catch (IOException e) {
@@ -294,12 +306,16 @@ public class HoodieActiveTimeline extends HoodieDefaultTimeline {
         Path fullPath = new Path(metaPath, filename);
         try {
             if (!content.isPresent()) {
-                if (fs.createNewFile(fullPath)) {
+                FSDataOutputStream out = fileContext.create(fullPath, EnumSet.of(CreateFlag.CREATE,
+                        CreateFlag.OVERWRITE), Options.CreateOpts.createParent());
+                if (out != null) {
+                    out.close();
                     log.info("Created a new file in meta path: " + fullPath);
                     return;
                 }
             } else {
-                FSDataOutputStream fsout = fs.create(fullPath, true);
+                FSDataOutputStream fsout = fileContext.create(fullPath, EnumSet.of(CreateFlag.CREATE,
+                        CreateFlag.OVERWRITE), Options.CreateOpts.createParent());
                 fsout.write(content.get());
                 fsout.close();
                 return;
@@ -311,7 +327,7 @@ public class HoodieActiveTimeline extends HoodieDefaultTimeline {
     }
 
     protected Optional<byte[]> readDataFromPath(Path detailPath) {
-        try (FSDataInputStream is = fs.open(detailPath)) {
+        try (FSDataInputStream is = fileContext.open(detailPath)) {
             return Optional.of(IOUtils.toByteArray(is));
         } catch (IOException e) {
             throw new HoodieIOException("Could not read commit details from " + detailPath, e);

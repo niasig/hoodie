@@ -25,10 +25,12 @@ import com.uber.hoodie.exception.HoodieException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -51,6 +53,7 @@ import java.util.stream.Collectors;
 public class HoodieROTablePathFilter implements PathFilter, Serializable {
 
     public static final Log LOG = LogFactory.getLog(HoodieROTablePathFilter.class);
+    transient private Configuration configuration;
 
     /**
      * Its quite common, to have all files from a given partition path be passed into accept(),
@@ -63,10 +66,10 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
      */
     private HashSet<String> nonHoodiePathCache;
 
-
     public HoodieROTablePathFilter() {
         hoodiePathCache = new HashMap<>();
         nonHoodiePathCache = new HashSet<>();
+        configuration = new Configuration();
     }
 
     /**
@@ -90,10 +93,6 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
         }
         Path folder = null;
         try {
-            FileSystem fs = path.getFileSystem(new Configuration());
-            if (fs.isDirectory(path)) {
-                return true;
-            }
 
             // Assumes path is a file
             folder = path.getParent(); // get the immediate parent.
@@ -112,6 +111,11 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
                             hoodiePathCache.get(folder.toString()).contains(path)));
                 }
                 return hoodiePathCache.get(folder.toString()).contains(path);
+            }
+
+            FileSystem fs = FileSystem.get(path.toUri(), configuration);
+            if (fs.isDirectory(path)) {
+                return true;
             }
 
             // Perform actual checking.
@@ -174,5 +178,11 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
             LOG.error(msg, e);
             throw new HoodieException(msg, e);
         }
+    }
+
+    private void readObject(java.io.ObjectInputStream in)
+            throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        configuration = new Configuration();
     }
 }

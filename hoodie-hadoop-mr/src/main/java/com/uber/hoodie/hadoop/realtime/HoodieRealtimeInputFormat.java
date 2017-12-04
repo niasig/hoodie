@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.io.ArrayWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
@@ -193,8 +194,8 @@ public class HoodieRealtimeInputFormat extends HoodieInputFormat implements Conf
 
     @Override
     public RecordReader<Void, ArrayWritable> getRecordReader(final InputSplit split,
-                                                             final JobConf job,
-                                                             final Reporter reporter) throws IOException {
+                                                                     final JobConf job,
+                                                                     final Reporter reporter) throws IOException {
         LOG.info("Creating record reader with readCols :" + job.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR));
         // sanity check
         Preconditions.checkArgument(split instanceof HoodieRealtimeFileSplit,

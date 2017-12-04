@@ -24,11 +24,12 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.hadoop.ParquetFileWriter;
 import org.apache.parquet.hadoop.ParquetWriter;
 import org.apache.spark.TaskContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -41,6 +42,8 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class HoodieParquetWriter<T extends HoodieRecordPayload, R extends IndexedRecord>
     extends ParquetWriter<IndexedRecord> implements HoodieStorageWriter<R> {
+    private static final Logger logger = LoggerFactory.getLogger(HoodieParquetWriter.class);
+
     private static double STREAM_COMPRESSION_RATIO = 0.1;
     private static AtomicLong recordIndex = new AtomicLong(1);
 
@@ -53,11 +56,13 @@ public class HoodieParquetWriter<T extends HoodieRecordPayload, R extends Indexe
     private final Schema schema;
 
 
-    private static Configuration registerFileSystem(Configuration conf) {
+    private static Configuration registerFileSystem(Path file, Configuration conf) throws IOException {
         Configuration returnConf = new Configuration(conf);
-        String scheme = FileSystem.getDefaultUri(conf).getScheme();
-        returnConf.set("fs." + HoodieWrapperFileSystem.getHoodieScheme(scheme) + ".impl",
-            HoodieWrapperFileSystem.class.getName());
+        String scheme = file.getFileSystem(conf).getScheme();
+        String schemeConfName = "fs." + HoodieWrapperFileSystem.getHoodieScheme(scheme) + ".impl";
+        logger.info("registerFileSystem: {} => {}", scheme, schemeConfName);
+        returnConf.set(schemeConfName,
+            HoodieWrapperFileSystem.class.getCanonicalName());
         return returnConf;
     }
 
@@ -69,11 +74,11 @@ public class HoodieParquetWriter<T extends HoodieRecordPayload, R extends Indexe
             parquetConfig.getPageSize(), parquetConfig.getPageSize(),
             ParquetWriter.DEFAULT_IS_DICTIONARY_ENABLED,
             ParquetWriter.DEFAULT_IS_VALIDATING_ENABLED, ParquetWriter.DEFAULT_WRITER_VERSION,
-            registerFileSystem(parquetConfig.getHadoopConf()));
+            registerFileSystem(file, parquetConfig.getHadoopConf()));
         this.file =
             HoodieWrapperFileSystem.convertToHoodiePath(file, parquetConfig.getHadoopConf());
         this.fs = (HoodieWrapperFileSystem) this.file
-            .getFileSystem(registerFileSystem(parquetConfig.getHadoopConf()));
+            .getFileSystem(registerFileSystem(this.file, parquetConfig.getHadoopConf()));
         // We cannot accurately measure the snappy compressed output file size. We are choosing a conservative 10%
         // TODO - compute this compression ratio dynamically by looking at the bytes written to the stream and the actual file size reported by HDFS
         this.maxFileSize = parquetConfig.getMaxFileSize() + Math

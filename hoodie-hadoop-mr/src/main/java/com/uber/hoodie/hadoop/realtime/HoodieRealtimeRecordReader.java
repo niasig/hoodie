@@ -18,7 +18,6 @@
 
 package com.uber.hoodie.hadoop.realtime;
 
-import com.google.common.collect.Lists;
 import com.uber.hoodie.common.model.HoodieAvroPayload;
 import com.uber.hoodie.common.model.HoodieRecord;
 import com.uber.hoodie.common.table.log.HoodieCompactedLogRecordScanner;
@@ -57,9 +56,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import parquet.avro.AvroSchemaConverter;
-import parquet.hadoop.ParquetFileReader;
-import parquet.schema.MessageType;
+import org.apache.parquet.avro.AvroSchemaConverter;
+import org.apache.parquet.hadoop.ParquetFileReader;
+import org.apache.parquet.schema.MessageType;
 
 /**
  * Record Reader implementation to merge fresh avro data with base parquet data, to support real time
@@ -126,7 +125,7 @@ public class HoodieRealtimeRecordReader implements RecordReader<Void, ArrayWrita
                 split.getDeltaFilePaths(), split.getPath(), projectionFields));
 
         HoodieCompactedLogRecordScanner compactedLogRecordScanner =
-            new HoodieCompactedLogRecordScanner(FSUtils.getFs(), split.getDeltaFilePaths(),
+            new HoodieCompactedLogRecordScanner(FSUtils.getFs(split.getPath()), split.getDeltaFilePaths(),
                 readerSchema);
 
         // NOTE: HoodieCompactedLogRecordScanner will not return records for an in-flight commit
@@ -292,9 +291,9 @@ public class HoodieRealtimeRecordReader implements RecordReader<Void, ArrayWrita
     }
 
     @Override
-    public boolean next(Void aVoid, ArrayWritable arrayWritable) throws IOException {
+    public boolean next(Void aNullWritable, ArrayWritable arrayWritable) throws IOException {
         // Call the underlying parquetReader.next - which may replace the passed in ArrayWritable with a new block of values
-        boolean result = this.parquetReader.next(aVoid, arrayWritable);
+        boolean result = this.parquetReader.next(aNullWritable, arrayWritable);
         if(!result) {
             // if the result is false, then there are no more records
             return false;

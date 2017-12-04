@@ -39,6 +39,7 @@ import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
@@ -46,6 +47,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -73,9 +75,10 @@ public class HoodieRealtimeRecordReaderTest {
 
     private HoodieLogFormat.Writer writeLogFile(File partitionDir, Schema schema, String fileId,
                                                 String baseCommit, String newCommit, int numberOfRecords) throws InterruptedException,IOException {
-        HoodieLogFormat.Writer writer = HoodieLogFormat.newWriterBuilder().onParentPath(new Path(partitionDir.getPath()))
+        Path parentPath = new Path(partitionDir.getPath());
+        HoodieLogFormat.Writer writer = HoodieLogFormat.newWriterBuilder().onParentPath(parentPath)
                 .withFileExtension(HoodieLogFile.DELTA_EXTENSION).withFileId(fileId)
-                .overBaseCommit(baseCommit).withFs(FSUtils.getFs()).build();
+                .overBaseCommit(baseCommit).withFs(FSUtils.getFs(parentPath)).build();
         List<IndexedRecord> records = new ArrayList<>();
         for(int i=0; i < numberOfRecords; i++) {
             records.add(SchemaTestUtil.generateAvroRecordFromJson(schema, i, newCommit, "fileid0"));
@@ -114,7 +117,12 @@ public class HoodieRealtimeRecordReaderTest {
         RecordReader<Void, ArrayWritable> reader =
                 new MapredParquetInputFormat().
                         getRecordReader(new FileSplit(split.getPath(), 0,
-                                        FSUtils.getFs().getLength(split.getPath()), (String[]) null), jobConf, null);
+                                        FSUtils.getFs(new Path(basePath.getRoot().getAbsolutePath()))
+                                                .getLength(split.getPath()),
+                                        (String[])
+                                        null),
+                jobConf,
+                                null);
         JobConf jobConf = new JobConf();
         List<Schema.Field> fields = schema.getFields();
         String names = fields.stream().map(f -> f.name().toString()).collect(Collectors.joining(","));
@@ -168,7 +176,8 @@ public class HoodieRealtimeRecordReaderTest {
         RecordReader<Void, ArrayWritable> reader =
           new MapredParquetInputFormat().
             getRecordReader(new FileSplit(split.getPath(), 0,
-              FSUtils.getFs().getLength(split.getPath()), (String[]) null), jobConf, null);
+              FSUtils.getFs(new Path(basePath.getRoot().getAbsolutePath())).getLength(split.getPath()), (String[]) null), jobConf,
+                    null);
         JobConf jobConf = new JobConf();
         List<Schema.Field> fields = schema.getFields();
 

@@ -64,13 +64,15 @@ public class HDFSParquetImporter implements Serializable{
 
     private static volatile Logger logger = LogManager.getLogger(HDFSParquetImporter.class);
     private final Config cfg;
-    private final transient FileSystem fs;
+    private final transient FileSystem fsTarget;
+    private final transient FileSystem fsSrc;
     public static final SimpleDateFormat PARTITION_FORMATTER = new SimpleDateFormat("yyyy/MM/dd");
 
     public HDFSParquetImporter(
         Config cfg) throws IOException {
         this.cfg = cfg;
-        fs = FSUtils.getFs();
+        fsTarget = FSUtils.getFs(cfg.targetPath);
+        fsSrc = FSUtils.getFs(cfg.srcPath);
     }
 
     public static class FormatValidator implements IValueValidator<String> {
@@ -182,15 +184,15 @@ public class HDFSParquetImporter implements Serializable{
     private String getSchema() throws Exception {
         // Read schema file.
         Path p = new Path(cfg.schemaFile);
-        if (!fs.exists(p)) {
+        if (!fsSrc.exists(p)) {
             throw new Exception(
                 String.format("Could not find - %s - schema file.", cfg.schemaFile));
         }
-        long len = fs.getFileStatus(p).getLen();
+        long len = fsSrc.getFileStatus(p).getLen();
         ByteBuffer buf = ByteBuffer.allocate((int) len);
         FSDataInputStream inputStream = null;
         try {
-            inputStream = fs.open(p);
+            inputStream = fsSrc.open(p);
             inputStream.readFully(0, buf.array(), 0, buf.array().length);
         }
         finally {
@@ -204,7 +206,7 @@ public class HDFSParquetImporter implements Serializable{
         int ret = -1;
         try {
             // Verify that targetPath is not present.
-            if (fs.exists(new Path(cfg.targetPath))) {
+            if (fsTarget.exists(new Path(cfg.targetPath))) {
                 throw new HoodieIOException(
                     String.format("Make sure %s is not present.", cfg.targetPath));
             }
@@ -220,9 +222,9 @@ public class HDFSParquetImporter implements Serializable{
     @VisibleForTesting
     protected int dataImport(JavaSparkContext jsc) throws IOException {
         try {
-            if (fs.exists(new Path(cfg.targetPath))) {
+            if (fsTarget.exists(new Path(cfg.targetPath))) {
                 // cleanup target directory.
-                fs.delete(new Path(cfg.targetPath), true);
+                fsTarget.delete(new Path(cfg.targetPath), true);
             }
 
             //Get schema.
@@ -232,7 +234,7 @@ public class HDFSParquetImporter implements Serializable{
             Properties properties = new Properties();
             properties.put(HoodieTableConfig.HOODIE_TABLE_NAME_PROP_NAME, cfg.tableName);
             properties.put(HoodieTableConfig.HOODIE_TABLE_TYPE_PROP_NAME, cfg.tableType);
-            HoodieTableMetaClient.initializePathAsHoodieDataset(fs, cfg.targetPath, properties);
+            HoodieTableMetaClient.initializePathAsHoodieDataset(fsTarget, cfg.targetPath, properties);
 
             HoodieWriteClient client = createHoodieClient(jsc, cfg.targetPath, schemaStr,
                 cfg.parallelism);

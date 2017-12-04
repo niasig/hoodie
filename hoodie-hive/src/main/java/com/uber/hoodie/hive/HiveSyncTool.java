@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat;
 import org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import parquet.schema.MessageType;
+import org.apache.parquet.schema.MessageType;
 
 import java.util.List;
 import java.util.Map;
@@ -185,7 +185,7 @@ public class HiveSyncTool {
       cmd.usage();
       System.exit(1);
     }
-    FileSystem fs = FSUtils.getFs();
+    FileSystem fs = FSUtils.getFs(cfg.basePath);
     HiveConf hiveConf = new HiveConf();
     hiveConf.addResource(fs.getConf());
     new HiveSyncTool(cfg, hiveConf, fs).syncHoodieTable();

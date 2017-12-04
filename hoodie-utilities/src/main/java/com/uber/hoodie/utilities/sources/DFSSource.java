@@ -35,7 +35,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
-import org.apache.hadoop.io.NullWritable;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -65,16 +64,16 @@ public class DFSSource extends Source {
 
     public DFSSource(PropertiesConfiguration config, JavaSparkContext sparkContext, SourceDataFormat dataFormat, SchemaProvider schemaProvider) {
         super(config, sparkContext, dataFormat, schemaProvider);
-        this.fs = FSUtils.getFs();
+        this.fs = FSUtils.getFs(config.getBasePath());
         DataSourceUtils.checkRequiredProperties(config, Arrays.asList(Config.ROOT_INPUT_PATH_PROP));
     }
 
 
     public static JavaRDD<GenericRecord> fromAvroFiles(final AvroConvertor convertor, String pathStr, JavaSparkContext sparkContext) {
-        JavaPairRDD<AvroKey, NullWritable> avroRDD = sparkContext.newAPIHadoopFile(pathStr,
+        JavaPairRDD<AvroKey, Void> avroRDD = sparkContext.newAPIHadoopFile(pathStr,
                 AvroKeyInputFormat.class,
                 AvroKey.class,
-                NullWritable.class,
+                Void.class,
                 sparkContext.hadoopConfiguration());
         return avroRDD.keys().map(r -> ((GenericRecord) r.datum()));
     }

@@ -168,6 +168,7 @@ class DefaultSource extends RelationProvider
 
     val basePath = new Path(parameters.get("path").get)
     val fs = basePath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+    log.info("createRelation: {} => fs {}", basePath, fs.getClass.getCanonicalName)
     var exists = fs.exists(basePath)
 
     // Handle various save modes

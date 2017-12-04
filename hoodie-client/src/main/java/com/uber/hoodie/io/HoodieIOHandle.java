@@ -47,7 +47,7 @@ public abstract class HoodieIOHandle<T extends HoodieRecordPayload> {
                           HoodieTable<T> hoodieTable) {
         this.commitTime = commitTime;
         this.config = config;
-        this.fs = FSUtils.getFs();
+        this.fs = FSUtils.getFs(config.getBasePath());
         this.hoodieTable = hoodieTable;
         this.hoodieTimeline = hoodieTable.getCompletedCommitTimeline();
         this.fileSystemView = hoodieTable.getROFileSystemView();
@@ -74,7 +74,7 @@ public abstract class HoodieIOHandle<T extends HoodieRecordPayload> {
                                                         String commitTime,
                                                         String partitionPath,
                                                         int taskPartitionId) {
-        FileSystem fs = FSUtils.getFs();
+        FileSystem fs = FSUtils.getFs(config.getBasePath());
         try {
             FileStatus[] prevFailedFiles = fs.globStatus(new Path(String
                 .format("%s/%s/%s", config.getBasePath(), partitionPath,
@@ -86,6 +86,7 @@ public abstract class HoodieIOHandle<T extends HoodieRecordPayload> {
                     fs.delete(status.getPath(), false);
                 }
             }
+            S3Utils.sync(new Path(config.getBasePath(), partitionPath));
         } catch (IOException e) {
             throw new HoodieIOException("Failed to cleanup Temp files from commit " + commitTime,
                 e);

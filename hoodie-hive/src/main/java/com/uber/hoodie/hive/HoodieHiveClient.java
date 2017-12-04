@@ -55,13 +55,14 @@ import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hive.jdbc.HiveDriver;
+import org.apache.parquet.avro.AvroSchemaConverter;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import parquet.format.converter.ParquetMetadataConverter;
-import parquet.hadoop.ParquetFileReader;
-import parquet.hadoop.metadata.ParquetMetadata;
-import parquet.schema.MessageType;
+import org.apache.parquet.format.converter.ParquetMetadataConverter;
+import org.apache.parquet.hadoop.ParquetFileReader;
+import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.parquet.schema.MessageType;
 
 @SuppressWarnings("ConstantConditions")
 public class HoodieHiveClient {
@@ -404,7 +405,7 @@ public class HoodieHiveClient {
       }
     }
     if (lastBlock != null) {
-      return new parquet.avro.AvroSchemaConverter().convert(lastBlock.getSchema());
+      return new AvroSchemaConverter().convert(lastBlock.getSchema());
     }
     // Fall back to read the schema from last compaction
     LOG.info("Falling back to read the schema from last compaction " + lastCompactionCommitOpt);
@@ -572,7 +573,7 @@ public class HoodieHiveClient {
     try {
       Table table = client.getTable(syncConfig.databaseName, syncConfig.tableName);
       table.putToParameters(HOODIE_LAST_COMMIT_TIME_SYNC, lastCommitSynced);
-      client.alter_table(syncConfig.databaseName, syncConfig.tableName, table, true);
+      client.alter_table(syncConfig.databaseName, syncConfig.tableName, table);
     } catch (Exception e) {
       throw new HoodieHiveSyncException(
           "Failed to get update last commit time synced to " + lastCommitSynced, e);
