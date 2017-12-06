@@ -485,7 +485,7 @@ public class TestHoodieBloomIndex {
         }
         HoodieAvroWriteSupport writeSupport = new HoodieAvroWriteSupport(new AvroSchemaConverter().convert(schema), schema, filter);
         String commitTime = FSUtils.getCommitTime(filename);
-        HoodieParquetConfig config =  new HoodieParquetConfig(writeSupport, CompressionCodecName.GZIP,
+        HoodieParquetConfig config =  new HoodieParquetConfig(writeSupport, CompressionCodecName.SNAPPY,
                 ParquetWriter.DEFAULT_BLOCK_SIZE, ParquetWriter.DEFAULT_PAGE_SIZE, 120 * 1024 * 1024, new Configuration());
         HoodieParquetWriter writer = new HoodieParquetWriter(
                 commitTime,

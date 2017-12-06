@@ -26,6 +26,7 @@ import com.uber.hoodie.exception.HoodieIOException;
 
 import java.util.Date;
 
+import com.uber.hoodie.io.S3Utils;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -294,7 +295,8 @@ public final class HoodieActiveTimeline extends HoodieDefaultTimeline {
                 if (!isS3) {
                     fileContext.rename(commitFilePath, inFlightCommitFilePath, Options.Rename.OVERWRITE);
                 } else {
-                    FileUtil.copy(fs, commitFilePath, fs, inFlightCommitFilePath, true, fs.getConf());
+                    FileUtil.copy(fs, commitFilePath, fs, inFlightCommitFilePath, false, fs.getConf());
+                    S3Utils.cleanDelete(commitFilePath);
                 }
             }
         } catch (IOException e) {

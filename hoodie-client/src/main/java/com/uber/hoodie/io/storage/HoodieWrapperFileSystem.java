@@ -76,12 +76,13 @@ public class HoodieWrapperFileSystem extends FileSystem {
 
     @Override public synchronized void initialize(URI uri, Configuration conf) throws IOException {
         this.uri = uri;
-        this.conf = conf;
         // Get the default filesystem to decorate
         URI realUri = URI.create(uri.toString().replaceFirst("^" + HOODIE_SCHEME_PREFIX, ""));
         logger.debug("initialize: uri map {} = {}", uri, realUri);
         fileSystem = FileSystem.get(realUri, conf);
-        fileContext = FileContext.getFileContext(realUri, conf);
+        this.conf = fileSystem.getConf();
+        fileContext = FileContext.getFileContext(realUri, this.conf);
+        logger.debug("initialize: {} {}", uri, this.conf);
         logger.debug("initialize: {} => {}", realUri, fileSystem.getClass().getCanonicalName());
         // Do not need to explicitly initialize the default filesystem, its done already in the above FileSystem.get
 //         fileSystem.initialize(realUri, conf);

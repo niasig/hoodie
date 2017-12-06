@@ -17,7 +17,6 @@
  */
 
 package com.uber.hoodie
-
 import com.uber.hoodie.common.model.{HoodieCommitMetadata, HoodieRecord, HoodieTableType}
 import com.uber.hoodie.common.table.HoodieTableMetaClient
 import com.uber.hoodie.common.util.ParquetUtils

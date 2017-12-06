@@ -31,16 +31,16 @@ import com.uber.hoodie.io.storage.HoodieStorageWriterFactory;
 import com.uber.hoodie.table.HoodieTable;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.fs.Path;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 import org.apache.spark.TaskContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Optional;
 import java.util.UUID;
 
 public class HoodieCreateHandle<T extends HoodieRecordPayload> extends HoodieIOHandle<T> {
-    private static Logger logger = LogManager.getLogger(HoodieCreateHandle.class);
+    private static Logger logger = LoggerFactory.getLogger(HoodieCreateHandle.class);
 
     private final WriteStatus status;
     private final HoodieStorageWriter<IndexedRecord> storageWriter;
@@ -137,6 +137,8 @@ public class HoodieCreateHandle<T extends HoodieRecordPayload> extends HoodieIOH
 
             return status;
         } catch (IOException e) {
+            logger.error("Failed to close the Insert Handle for path {} ", path, e);
+            S3Utils.cleanDelete(path);
             throw new HoodieInsertException("Failed to close the Insert Handle for path " + path,
                 e);
         }

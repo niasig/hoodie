@@ -276,7 +276,7 @@ public class TestUtil {
     BloomFilter filter = new BloomFilter(1000, 0.0001);
     HoodieAvroWriteSupport writeSupport = new HoodieAvroWriteSupport(parquetSchema, schema, filter);
     ParquetWriter writer = new ParquetWriter(filePath,
-        writeSupport, CompressionCodecName.GZIP, 120 * 1024 * 1024, ParquetWriter.DEFAULT_PAGE_SIZE,
+        writeSupport, CompressionCodecName.SNAPPY, 120 * 1024 * 1024, ParquetWriter.DEFAULT_PAGE_SIZE,
         ParquetWriter.DEFAULT_PAGE_SIZE, ParquetWriter.DEFAULT_IS_DICTIONARY_ENABLED,
         ParquetWriter.DEFAULT_IS_VALIDATING_ENABLED, ParquetWriter.DEFAULT_WRITER_VERSION,
         fileSystem.getConf());

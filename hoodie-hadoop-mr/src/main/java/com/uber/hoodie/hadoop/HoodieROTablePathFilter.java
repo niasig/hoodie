@@ -64,7 +64,7 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
     public static final Log LOG = LogFactory.getLog(HoodieROTablePathFilter.class);
     transient private Configuration configuration;
 
-    
+
     /**
      * Its quite common, to have all files from a given partition path be passed into accept(),
      * cache the check for hoodie metadata for known partition paths and the latest versions of files
@@ -92,47 +92,48 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
 
     @Override
     public boolean accept(Path path) {
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Checking acceptance for path " + path);
-        }
-        Path folder = null;
-        try {
-            FileSystem fs = FileSystem.get(path.toUri(), configuration);
-            // Assumes path is a file
-            folder = path.getParent(); // get the immediate parent.
-            HoodieFileCache hoodieFileCache = hoodiePathCache.get(folder.toString());
-            if (hoodieFileCache == null) {
-                if (fs.isDirectory(path)) {
-                    return true;
-                }
-
-                if (HoodiePartitionMetadata.hasPartitionMetadata(fs, folder)) {
-                    HoodiePartitionMetadata metadata = new HoodiePartitionMetadata(fs, folder);
-                    metadata.readFromFS();
-                    Path baseDir = HoodieHiveUtil.getNthParent(folder, metadata.getPartitionDepth());
-                    hoodieFileCache = hoodieBaseCache.get(baseDir.toString());
-                    if (hoodieFileCache == null) {
-                        hoodieFileCache = new HoodieFileCache(fs, folder, baseDir);
-                        hoodieBaseCache.put(baseDir.toString(), hoodieFileCache);
-                    }
-                    hoodiePathCache.put(folder.toString(), hoodieFileCache);
-
-                    if (hoodieFileCache.accept(path)) {
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug(String.format("%s Hoodie path found in cache, accepting.\n", path));
-                        }
-                        return true;
-                    }
-                } else {
-                    LOG.error("Ignoring path: " + folder.toString() + ". No hoodie metadata found.");
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            String msg = "Error checking path :" + path +", under folder: "+ folder;
-            LOG.error(msg, e);
-            throw new HoodieException(msg, e);
-        }
+        return !path.toString().contains(".hoodie");
+//        if (LOG.isDebugEnabled()) {
+//            LOG.debug("Checking acceptance for path " + path);
+//        }
+//        Path folder = null;
+//        try {
+//            FileSystem fs = FileSystem.get(path.toUri(), configuration);
+//            // Assumes path is a file
+//            folder = path.getParent(); // get the immediate parent.
+//            HoodieFileCache hoodieFileCache = hoodiePathCache.get(folder.toString());
+//            if (hoodieFileCache == null) {
+//                if (fs.isDirectory(path)) {
+//                    return true;
+//                }
+//
+//                if (HoodiePartitionMetadata.hasPartitionMetadata(fs, folder)) {
+//                    HoodiePartitionMetadata metadata = new HoodiePartitionMetadata(fs, folder);
+//                    metadata.readFromFS();
+//                    Path baseDir = HoodieHiveUtil.getNthParent(folder, metadata.getPartitionDepth());
+//                    hoodieFileCache = hoodieBaseCache.get(baseDir.toString());
+//                    if (hoodieFileCache == null) {
+//                        hoodieFileCache = new HoodieFileCache(fs, folder, baseDir);
+//                        hoodieBaseCache.put(baseDir.toString(), hoodieFileCache);
+//                    }
+//                    hoodiePathCache.put(folder.toString(), hoodieFileCache);
+//
+//                    if (hoodieFileCache.accept(path)) {
+//                        if (LOG.isDebugEnabled()) {
+//                            LOG.debug(String.format("%s Hoodie path found in cache, accepting.\n", path));
+//                        }
+//                        return true;
+//                    }
+//                } else {
+//                    LOG.error("Ignoring path: " + folder.toString() + ". No hoodie metadata found.");
+//                }
+//            }
+//            return false;
+//        } catch (Exception e) {
+//            String msg = "Error checking path :" + path +", under folder: "+ folder;
+//            LOG.error(msg, e);
+//            throw new HoodieException(msg, e);
+//        }
     }
 
     private void readObject(java.io.ObjectInputStream in)

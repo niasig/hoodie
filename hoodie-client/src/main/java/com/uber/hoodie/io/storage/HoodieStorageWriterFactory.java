@@ -48,7 +48,7 @@ public class HoodieStorageWriterFactory {
             new HoodieAvroWriteSupport(new AvroSchemaConverter().convert(schema), schema, filter);
 
         HoodieParquetConfig parquetConfig =
-            new HoodieParquetConfig(writeSupport, CompressionCodecName.GZIP,
+            new HoodieParquetConfig(writeSupport, CompressionCodecName.SNAPPY,
                 config.getParquetBlockSize(), config.getParquetPageSize(),
                 config.getParquetMaxFileSize(), FSUtils.getFs(config.getBasePath()).getConf());
 

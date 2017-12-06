@@ -18,6 +18,8 @@ package com.uber.hoodie.common.util;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.uber.hoodie.common.model.HoodieLogFile;
 import com.uber.hoodie.common.model.HoodiePartitionMetadata;
 import com.uber.hoodie.common.table.timeline.HoodieInstant;
@@ -36,8 +38,6 @@ import org.apache.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -69,27 +69,30 @@ public class FSUtils {
         FSUtils.fs = fs;
     }
 
-
-    public static Configuration getConf() {
-        return new Configuration();
-    }
-
     public static FileSystem getFs(Path path) {
-        FileSystem fs;
-        try {
-            fs = path.getFileSystem(new Configuration());
-        } catch (IOException e) {
-            throw new HoodieIOException("Failed to get instance of " + FileSystem.class.getName(),
-                    e);
-        }
-        Configuration conf = fs.getConf();
-        LOG.debug(String.format("Hadoop Configuration: fs.defaultFS: [%s], Config:[%s], FileSystem: [%s]",
-                conf.getRaw("fs.defaultFS"), conf.toString(), fs.toString()));
-        return fs;
+        return getFs(path, new Configuration());
     }
 
     public static FileSystem getFs(String path) {
         return getFs(new Path(path));
+    }
+
+    public static FileSystem getFs(String path, Configuration conf) {
+        return getFs(new Path(path), conf);
+    }
+
+    public static FileSystem getFs(Path path, Configuration conf) {
+        FileSystem fs;
+        try {
+            fs = path.getFileSystem(conf);
+        } catch (IOException e) {
+            throw new HoodieIOException("Failed to get instance of " + FileSystem.class.getName(),
+                    e);
+        }
+        Configuration fsConf = fs.getConf();
+        LOG.debug(String.format("Hadoop Configuration: fs.defaultFS: [%s], Config:[%s], FileSystem: [%s]",
+                fsConf.getRaw("fs.defaultFS"), fsConf.toString(), fs.toString()));
+        return fs;
     }
 
     public static String makeDataFileName(String commitTime, int taskPartitionId, String fileId) {
@@ -374,4 +377,5 @@ public class FSUtils {
     public static Long getSizeInMB(long sizeInBytes) {
         return sizeInBytes / (1024 * 1024);
     }
+
 }

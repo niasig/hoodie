@@ -117,7 +117,7 @@ public class HoodieWriteClient<T extends HoodieRecordPayload> implements Seriali
      * @param rollbackInFlight
      */
     public HoodieWriteClient(JavaSparkContext jsc, HoodieWriteConfig clientConfig, boolean rollbackInFlight) {
-        this.fs = FSUtils.getFs(clientConfig.getBasePath());
+        this.fs = FSUtils.getFs(clientConfig.getBasePath(), jsc.hadoopConfiguration());
         this.jsc = jsc;
         this.config = clientConfig;
         this.index = HoodieIndex.createIndex(config, jsc);
@@ -350,6 +350,7 @@ public class HoodieWriteClient<T extends HoodieRecordPayload> implements Seriali
         return dedupedRecords
                 .mapToPair(record ->
                         new Tuple2<>(new Tuple2<>(record.getKey(), Option.apply(record.getCurrentLocation())), record))
+                .coalesce(config.getInsertShuffleParallelism())
                 .partitionBy(partitioner)
                 .map(tuple -> tuple._2());
     }

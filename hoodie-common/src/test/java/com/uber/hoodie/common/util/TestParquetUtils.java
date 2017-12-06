@@ -68,7 +68,7 @@ public class TestParquetUtils {
 
         String filePath = basePath + "/test.parquet";
         ParquetWriter writer = new ParquetWriter(new Path(filePath),
-                writeSupport, CompressionCodecName.GZIP, 120 * 1024 * 1024, ParquetWriter.DEFAULT_PAGE_SIZE);
+                writeSupport, CompressionCodecName.SNAPPY, 120 * 1024 * 1024, ParquetWriter.DEFAULT_PAGE_SIZE);
         for (String rowKey : rowKeys) {
             GenericRecord rec = new GenericData.Record(schema);
             rec.put(HoodieRecord.RECORD_KEY_METADATA_FIELD, rowKey);
