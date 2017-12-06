@@ -15,13 +15,19 @@
  */
 package com.uber.hoodie.hadoop;
 
+import com.uber.hoodie.common.model.HoodieCommitMetadata;
 import com.uber.hoodie.common.model.HoodieDataFile;
 import com.uber.hoodie.common.model.HoodiePartitionMetadata;
 import com.uber.hoodie.common.table.HoodieTableMetaClient;
+import com.uber.hoodie.common.table.HoodieTimeline;
 import com.uber.hoodie.common.table.view.HoodieTableFileSystemView;
+import com.uber.hoodie.common.util.FSUtils;
 import com.uber.hoodie.exception.DatasetNotFoundException;
 import com.uber.hoodie.exception.HoodieException;
 
+import com.uber.hoodie.exception.HoodieIOException;
+import it.unimi.dsi.fastutil.longs.Long2BooleanArrayMap;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -35,6 +41,8 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -59,16 +67,10 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
      * Its quite common, to have all files from a given partition path be passed into accept(),
      * cache the check for hoodie metadata for known partition paths and the latest versions of files
      */
-    private HashMap<String, HashSet<Path>> hoodiePathCache;
-
-    /**
-     * Paths that are known to be non-hoodie datasets.
-     */
-    private HashSet<String> nonHoodiePathCache;
+    private Map<String, HoodieFileCache> hoodiePathCache;
 
     public HoodieROTablePathFilter() {
         hoodiePathCache = new HashMap<>();
-        nonHoodiePathCache = new HashSet<>();
         configuration = new Configuration();
     }
 
@@ -84,94 +86,31 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
         return null;
     }
 
-
     @Override
     public boolean accept(Path path) {
-
         if (LOG.isDebugEnabled()) {
             LOG.debug("Checking acceptance for path " + path);
         }
         Path folder = null;
         try {
-
+            FileSystem fs = FileSystem.get(path.toUri(), configuration);
             // Assumes path is a file
             folder = path.getParent(); // get the immediate parent.
-            // Try to use the caches.
-            if (nonHoodiePathCache.contains(folder.toString())) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Accepting non-hoodie path from cache: " + path);
-                }
-                return true;
-            }
-
-            if (hoodiePathCache.containsKey(folder.toString())) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug(String.format("%s Hoodie path checked against cache, accept => %s \n",
-                            path,
-                            hoodiePathCache.get(folder.toString()).contains(path)));
-                }
-                return hoodiePathCache.get(folder.toString()).contains(path);
-            }
-
-            FileSystem fs = FileSystem.get(path.toUri(), configuration);
-            if (fs.isDirectory(path)) {
-                return true;
-            }
-
-            // Perform actual checking.
-            Path baseDir;
-            if (HoodiePartitionMetadata.hasPartitionMetadata(fs, folder)) {
-                HoodiePartitionMetadata metadata = new HoodiePartitionMetadata(fs, folder);
-                metadata.readFromFS();
-                baseDir = HoodieHiveUtil.getNthParent(folder, metadata.getPartitionDepth());
-            } else {
-                baseDir = safeGetParentsParent(folder);
-            }
-
-            if (baseDir != null) {
-                try {
-                    HoodieTableMetaClient metaClient =
-                        new HoodieTableMetaClient(fs, baseDir.toString());
-                    HoodieTableFileSystemView fsView = new HoodieTableFileSystemView(metaClient,
-                        metaClient.getActiveTimeline().getCommitTimeline()
-                            .filterCompletedInstants(),
-                            fs.listStatus(folder));
-                    List<HoodieDataFile> latestFiles = fsView
-                            .getLatestDataFiles()
-                            .collect(Collectors.toList());
-                    // populate the cache
-                    if (!hoodiePathCache.containsKey(folder.toString())) {
-                        hoodiePathCache.put(folder.toString(), new HashSet<>());
-                    }
-                    LOG.info("Based on hoodie metadata from base path: " + baseDir.toString() +
-                            ", caching " + latestFiles.size() + " files under "+ folder);
-                    for (HoodieDataFile lfile: latestFiles) {
-                        hoodiePathCache.get(folder.toString()).add(new Path(lfile.getPath()));
-                    }
-
-                    // accept the path, if its among the latest files.
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug(String.format("%s checked after cache population, accept => %s \n",
-                                path,
-                                hoodiePathCache.get(folder.toString()).contains(path)));
-                    }
-                    return hoodiePathCache.get(folder.toString()).contains(path);
-                } catch (DatasetNotFoundException e) {
-                   // Non-hoodie path, accept it.
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug(String.format("(1) Caching non-hoodie path under %s \n",
-                                folder.toString()));
-                    }
-                    nonHoodiePathCache.add(folder.toString());
+            HoodieFileCache hoodieFileCache = hoodiePathCache.get(folder.toString());
+            if (hoodieFileCache == null) {
+                if (fs.isDirectory(path)) {
                     return true;
                 }
-            } else {
-                // files is at < 3 level depth in FS tree, can't be hoodie dataset
+                hoodieFileCache = new HoodieFileCache(fs, folder);
+                hoodiePathCache.put(folder.toString(), hoodieFileCache);
+            }
+            if (hoodieFileCache.accept(path)) {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug(String.format("(2) Caching non-hoodie path under %s \n", folder.toString()));
+                    LOG.debug(String.format("%s Hoodie path found in cache, accepting.\n", path));
                 }
-                nonHoodiePathCache.add(folder.toString());
                 return true;
+            } else {
+                return false;
             }
         } catch (Exception e) {
             String msg = "Error checking path :" + path +", under folder: "+ folder;
@@ -184,5 +123,64 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
             throws IOException, ClassNotFoundException {
         in.defaultReadObject();
         configuration = new Configuration();
+    }
+
+    private static class HoodieFileCache {
+        Map<String, String> cache;
+        String latestCommitTime;
+
+        private HoodieFileCache(FileSystem fs, Path folder) {
+            cache = new HashMap<>();
+            latestCommitTime = "0";
+            if (HoodiePartitionMetadata.hasPartitionMetadata(fs, folder)) {
+                HoodiePartitionMetadata metadata = new HoodiePartitionMetadata(fs, folder);
+                metadata.readFromFS();
+                Path baseDir = HoodieHiveUtil.getNthParent(folder, metadata.getPartitionDepth());
+                HoodieTableMetaClient metaClient =
+                        new HoodieTableMetaClient(fs, baseDir.toString());
+
+                HoodieTimeline timeline = metaClient.getActiveTimeline().getCommitTimeline().filterCompletedInstants();
+                timeline.getInstants().map(s -> {
+                    try {
+                        return HoodieCommitMetadata.fromBytes(timeline.getInstantDetails(s).get());
+                    } catch (IOException e) {
+                        throw new HoodieIOException(
+                                "Failed to read all commits.", e);
+                    }
+                }).forEach(new Consumer<HoodieCommitMetadata>() {
+                    @Override
+                    public void accept(HoodieCommitMetadata hoodieCommitMetadata) {
+                        for (Map.Entry<String, String> entry : hoodieCommitMetadata.getFileIdAndRelativePaths()
+                                                                                   .entrySet()) {
+                            String fileId = entry.getKey();
+                            String commitTime = FSUtils.getCommitTimeFromPath(entry.getValue());
+                            String maxCommitTime = cache.get(fileId);
+                            if (maxCommitTime == null
+                                    || HoodieTimeline.compareTimestamps(commitTime, maxCommitTime, HoodieTimeline.GREATER)) {
+                                cache.put(fileId, commitTime);
+
+                                if (HoodieTimeline.compareTimestamps(commitTime, latestCommitTime, HoodieTimeline.GREATER)) {
+                                    latestCommitTime = commitTime;
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                LOG.error("Ignoring path: " + folder.toString() + ". No hoodie metadata found.");
+            }
+        }
+
+        private boolean accept(Path path) {
+            String name = path.getName();
+            String fileId = FSUtils.getFileId(name);
+            String fileCommitTime = FSUtils.getCommitTime(name);
+            String maxCommitTime = cache.get(fileId);
+            if (maxCommitTime == null) {
+                return HoodieTimeline.compareTimestamps(fileCommitTime, latestCommitTime, HoodieTimeline.LESSER_OR_EQUAL);
+            } else {
+                return StringUtils.equals(fileCommitTime, maxCommitTime);
+            }
+        }
     }
 }

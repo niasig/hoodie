@@ -119,9 +119,9 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
     }
 
     @Override
-    public boolean containsOrBeforeTimelineStarts(String instant) {
-        return instants.stream().anyMatch(s -> s.getTimestamp().equals(instant))
-            || isBeforeTimelineStarts(instant);
+    public boolean containsOrBeforeTimelineStarts(String ts) {
+        return instants.stream().anyMatch(s -> s.getTimestamp().equals(ts))
+            || isBeforeTimelineStarts(ts);
     }
 
     @Override
@@ -130,10 +130,10 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
     }
 
     @Override
-    public boolean isBeforeTimelineStarts(String instant) {
+    public boolean isBeforeTimelineStarts(String ts) {
         Optional<HoodieInstant> firstCommit = firstInstant();
         return firstCommit.isPresent() &&
-                HoodieTimeline.compareTimestamps(instant, firstCommit.get().getTimestamp(), LESSER);
+                HoodieTimeline.compareTimestamps(ts, firstCommit.get().getTimestamp(), LESSER);
     }
 
 

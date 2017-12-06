@@ -116,6 +116,11 @@ public class FSUtils {
         return fullFileName.split("_")[2].split("\\.")[0];
     }
 
+    public static String getCommitTimeFromPath(String path) {
+        String[] split = path.split("_");
+        return split[split.length - 1].split("\\.")[0];
+    }
+
     public static long getFileSize(FileSystem fs, Path path) throws IOException {
 //        return fs.getContentSummary(path).getLength();
         return fs.getFileStatus(path).getLen();
