@@ -151,6 +151,11 @@ public class FSUtils {
         return partitionFullPath.substring(partitionStartIndex + basePath.getName().length() + 1);
     }
 
+    public static String getPartitionPath(String path) {
+        int slash = path.lastIndexOf("/");
+        return path.substring(0, slash);
+    }
+
     /**
      * Obtain all the partition paths, that are present in this table, denoted by presence of {@link
      * com.uber.hoodie.common.model.HoodiePartitionMetadata#HOODIE_PARTITION_METAFILE}

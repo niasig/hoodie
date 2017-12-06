@@ -28,6 +28,7 @@ import com.uber.hoodie.exception.HoodieException;
 import com.uber.hoodie.exception.HoodieIOException;
 import it.unimi.dsi.fastutil.longs.Long2BooleanArrayMap;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -63,14 +64,17 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
     public static final Log LOG = LogFactory.getLog(HoodieROTablePathFilter.class);
     transient private Configuration configuration;
 
+    
     /**
      * Its quite common, to have all files from a given partition path be passed into accept(),
      * cache the check for hoodie metadata for known partition paths and the latest versions of files
      */
     private Map<String, HoodieFileCache> hoodiePathCache;
+    private Map<String, HoodieFileCache> hoodieBaseCache;
 
     public HoodieROTablePathFilter() {
         hoodiePathCache = new HashMap<>();
+        hoodieBaseCache = new HashMap<>();
         configuration = new Configuration();
     }
 
@@ -101,17 +105,29 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
                 if (fs.isDirectory(path)) {
                     return true;
                 }
-                hoodieFileCache = new HoodieFileCache(fs, folder);
-                hoodiePathCache.put(folder.toString(), hoodieFileCache);
-            }
-            if (hoodieFileCache.accept(path)) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug(String.format("%s Hoodie path found in cache, accepting.\n", path));
+
+                if (HoodiePartitionMetadata.hasPartitionMetadata(fs, folder)) {
+                    HoodiePartitionMetadata metadata = new HoodiePartitionMetadata(fs, folder);
+                    metadata.readFromFS();
+                    Path baseDir = HoodieHiveUtil.getNthParent(folder, metadata.getPartitionDepth());
+                    hoodieFileCache = hoodieBaseCache.get(baseDir.toString());
+                    if (hoodieFileCache == null) {
+                        hoodieFileCache = new HoodieFileCache(fs, folder, baseDir);
+                        hoodieBaseCache.put(baseDir.toString(), hoodieFileCache);
+                    }
+                    hoodiePathCache.put(folder.toString(), hoodieFileCache);
+
+                    if (hoodieFileCache.accept(path)) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug(String.format("%s Hoodie path found in cache, accepting.\n", path));
+                        }
+                        return true;
+                    }
+                } else {
+                    LOG.error("Ignoring path: " + folder.toString() + ". No hoodie metadata found.");
                 }
-                return true;
-            } else {
-                return false;
             }
+            return false;
         } catch (Exception e) {
             String msg = "Error checking path :" + path +", under folder: "+ folder;
             LOG.error(msg, e);
@@ -126,56 +142,54 @@ public class HoodieROTablePathFilter implements PathFilter, Serializable {
     }
 
     private static class HoodieFileCache {
-        Map<String, String> cache;
+        Map<Pair<String, String>, String> fileToTimestamp;
         String latestCommitTime;
 
-        private HoodieFileCache(FileSystem fs, Path folder) {
-            cache = new HashMap<>();
+        private HoodieFileCache(FileSystem fs, Path folder, Path baseDir) {
+            fileToTimestamp = new HashMap<>();
             latestCommitTime = "0";
-            if (HoodiePartitionMetadata.hasPartitionMetadata(fs, folder)) {
-                HoodiePartitionMetadata metadata = new HoodiePartitionMetadata(fs, folder);
-                metadata.readFromFS();
-                Path baseDir = HoodieHiveUtil.getNthParent(folder, metadata.getPartitionDepth());
-                HoodieTableMetaClient metaClient =
-                        new HoodieTableMetaClient(fs, baseDir.toString());
+            HoodieTableMetaClient metaClient =
+                    new HoodieTableMetaClient(fs, baseDir.toString());
 
-                HoodieTimeline timeline = metaClient.getActiveTimeline().getCommitTimeline().filterCompletedInstants();
-                timeline.getInstants().map(s -> {
-                    try {
-                        return HoodieCommitMetadata.fromBytes(timeline.getInstantDetails(s).get());
-                    } catch (IOException e) {
-                        throw new HoodieIOException(
-                                "Failed to read all commits.", e);
-                    }
-                }).forEach(new Consumer<HoodieCommitMetadata>() {
-                    @Override
-                    public void accept(HoodieCommitMetadata hoodieCommitMetadata) {
-                        for (Map.Entry<String, String> entry : hoodieCommitMetadata.getFileIdAndRelativePaths()
-                                                                                   .entrySet()) {
-                            String fileId = entry.getKey();
-                            String commitTime = FSUtils.getCommitTimeFromPath(entry.getValue());
-                            String maxCommitTime = cache.get(fileId);
-                            if (maxCommitTime == null
-                                    || HoodieTimeline.compareTimestamps(commitTime, maxCommitTime, HoodieTimeline.GREATER)) {
-                                cache.put(fileId, commitTime);
+            HoodieTimeline timeline = metaClient.getActiveTimeline().getCommitTimeline().filterCompletedInstants();
+            timeline.getInstants().map(s -> {
+                try {
+                    return HoodieCommitMetadata.fromBytes(timeline.getInstantDetails(s).get());
+                } catch (IOException e) {
+                    throw new HoodieIOException(
+                            "Failed to read all commits.", e);
+                }
+            }).forEach(new Consumer<HoodieCommitMetadata>() {
+                @Override
+                public void accept(HoodieCommitMetadata hoodieCommitMetadata) {
+                    for (Map.Entry<String, String> entry : hoodieCommitMetadata.getFileIdAndRelativePaths()
+                                                                               .entrySet()) {
+                        String fileId = entry.getKey();
+                        String relativePath = entry.getValue();
+                        String commitTime = FSUtils.getCommitTimeFromPath(relativePath);
+                        String relativePartitionPath = FSUtils.getPartitionPath(relativePath);
+                        Pair<String, String> key = Pair.of(fileId, (baseDir + "/" + relativePartitionPath));
+                        String maxCommitTime = fileToTimestamp.get(key);
+                        if (maxCommitTime == null
+                                || HoodieTimeline.compareTimestamps(commitTime, maxCommitTime, HoodieTimeline.GREATER)) {
+                            fileToTimestamp.put(key, commitTime);
 
-                                if (HoodieTimeline.compareTimestamps(commitTime, latestCommitTime, HoodieTimeline.GREATER)) {
-                                    latestCommitTime = commitTime;
-                                }
+                            if (HoodieTimeline.compareTimestamps(commitTime, latestCommitTime, HoodieTimeline.GREATER)) {
+                                latestCommitTime = commitTime;
                             }
                         }
                     }
-                });
-            } else {
-                LOG.error("Ignoring path: " + folder.toString() + ". No hoodie metadata found.");
-            }
+                }
+            });
         }
 
         private boolean accept(Path path) {
             String name = path.getName();
             String fileId = FSUtils.getFileId(name);
             String fileCommitTime = FSUtils.getCommitTime(name);
-            String maxCommitTime = cache.get(fileId);
+            String partitionPath = FSUtils.getPartitionPath(path.toString());
+            Pair<String, String> key = Pair.of(fileId, partitionPath);
+            String maxCommitTime = fileToTimestamp.get(key);
             if (maxCommitTime == null) {
                 return HoodieTimeline.compareTimestamps(fileCommitTime, latestCommitTime, HoodieTimeline.LESSER_OR_EQUAL);
             } else {
