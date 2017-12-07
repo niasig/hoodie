@@ -95,6 +95,10 @@ public class FSUtils {
         return fs;
     }
 
+    public static boolean isDataFile(String path) {
+        return path.contains(".parquet");
+    }
+
     public static String makeDataFileName(String commitTime, int taskPartitionId, String fileId) {
         return String.format("%s_%d_%s.parquet", fileId, taskPartitionId, commitTime);
     }
