@@ -303,11 +303,11 @@ public class HoodieWriteClient<T extends HoodieRecordPayload> implements Seriali
                                                        final boolean isUpsert) {
 
         // Cache the tagged records, so we don't end up computing both
-        preppedRecords.persist(StorageLevel.MEMORY_AND_DISK_SER());
+        preppedRecords.persist(config.getWriteStatusStorageLevel());
 
         WorkloadProfile profile = null;
         if (hoodieTable.isWorkloadProfileNeeded()) {
-            profile = new WorkloadProfile(preppedRecords);
+            profile = new WorkloadProfile(config, preppedRecords);
             logger.info("Workload profile :" + profile);
         }
 
@@ -350,7 +350,6 @@ public class HoodieWriteClient<T extends HoodieRecordPayload> implements Seriali
         return dedupedRecords
                 .mapToPair(record ->
                         new Tuple2<>(new Tuple2<>(record.getKey(), Option.apply(record.getCurrentLocation())), record))
-                .coalesce(config.getInsertShuffleParallelism())
                 .partitionBy(partitioner)
                 .map(tuple -> tuple._2());
     }

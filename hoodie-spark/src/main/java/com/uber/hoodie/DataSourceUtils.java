@@ -116,6 +116,7 @@ public class DataSourceUtils {
                                 .build())
                 // override above with Hoodie configs specified as options.
                 .withProps(parameters)
+                .withHadoopConfiguration(jssc.hadoopConfiguration())
                 .build();
 
         return new HoodieWriteClient<>(jssc, writeConfig);

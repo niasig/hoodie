@@ -21,6 +21,7 @@ import com.uber.hoodie.common.model.HoodieRecord;
 import com.uber.hoodie.common.model.HoodieRecordLocation;
 import com.uber.hoodie.common.model.HoodieRecordPayload;
 
+import com.uber.hoodie.config.HoodieWriteConfig;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.PairFunction;
 
@@ -52,9 +53,11 @@ public class WorkloadProfile<T extends HoodieRecordPayload> implements Serializa
 
 
     private final WorkloadStat globalStat;
+    private final HoodieWriteConfig config;
 
 
-    public WorkloadProfile(JavaRDD<HoodieRecord<T>> taggedRecords) {
+    public WorkloadProfile(HoodieWriteConfig config, JavaRDD<HoodieRecord<T>> taggedRecords) {
+        this.config = config;
         this.taggedRecords = taggedRecords;
         this.partitionPathStatMap = new HashMap<>();
         this.globalStat = new WorkloadStat();
@@ -66,7 +69,9 @@ public class WorkloadProfile<T extends HoodieRecordPayload> implements Serializa
         Map<Tuple2<String, Option<HoodieRecordLocation>>, Long> partitionLocationCounts = taggedRecords
                 .mapToPair(record ->
                         new Tuple2<>(new Tuple2<>(record.getPartitionPath(), Option.apply(record.getCurrentLocation())), record))
-                .countByKey();
+                .mapValues(v -> 1L)
+                .reduceByKey((l, r) -> l + r, config.getBloomIndexParallelism())
+                .collectAsMap();
 
         for (Map.Entry<Tuple2<String, Option<HoodieRecordLocation>>, Long> e: partitionLocationCounts.entrySet()) {
             String partitionPath = e.getKey()._1();

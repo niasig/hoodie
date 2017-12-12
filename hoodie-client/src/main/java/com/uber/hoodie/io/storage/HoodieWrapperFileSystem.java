@@ -481,7 +481,7 @@ public class HoodieWrapperFileSystem extends FileSystem {
     }
 
     @Override public void close() throws IOException {
-        logger.error("close called {}", this);
+//        logger.error("close called {}", this);
 //        closed = true;
 //        fileSystem.close();
     }

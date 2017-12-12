@@ -87,73 +87,73 @@ public class S3Utils {
     private static final Supplier<DynamoDB> dynamoDB = Suppliers.memoize(() -> new DynamoDB(dynamodbClient.get()));
 
     public static void sync(Path path) {
-        if (isS3(path) && isEmrfs.get()) {
-            try {
-                FileSystem fs = FSUtils.getFs(path);
-                Set<String> emrfsFiles = emrfsList(path);
-                Set<String> s3Files = new HashSet<>();
-                RemoteIterator<LocatedFileStatus> it = fs.listFiles(path, false);
-                while (it.hasNext()) {
-                    LocatedFileStatus fileStatus = it.next();
-                    s3Files.add(fileStatus.getPath().getName());
-                }
-
-                emrfsFiles.stream().filter(file -> !s3Files.contains(file))
-                        .forEach(file -> {
-                            Path deletePath = new Path(path, file);
-                            logger.info("sync: deleting {}", deletePath);
-                            emrfsDelete(deletePath);
-
-                        });
-            } catch (Exception e) {
-                logger.error("sync: {}", path, e);
-            }
-        }
+//        if (isS3(path) && isEmrfs.get()) {
+//            try {
+//                FileSystem fs = FSUtils.getFs(path, configuration.get());
+//                Set<String> emrfsFiles = emrfsList(path);
+//                Set<String> s3Files = new HashSet<>();
+//                RemoteIterator<LocatedFileStatus> it = fs.listFiles(path, false);
+//                while (it.hasNext()) {
+//                    LocatedFileStatus fileStatus = it.next();
+//                    s3Files.add(fileStatus.getPath().getName());
+//                }
+//
+//                emrfsFiles.stream().filter(file -> !s3Files.contains(file))
+//                        .forEach(file -> {
+//                            Path deletePath = new Path(path, file);
+//                            logger.info("sync: deleting {}", deletePath);
+//                            emrfsDelete(deletePath);
+//
+//                        });
+//            } catch (Exception e) {
+//                logger.error("sync: {}", path, e);
+//            }
+//        }
     }
 
-    private static Set<String> emrfsList(Path parentPath) {
-        String hashKey = parentPath.toString().replaceFirst("s3:/", "");
-
-        Condition hashKeyCondition = new Condition().withComparisonOperator(ComparisonOperator.EQ)
-                .withAttributeValueList(new AttributeValue().withS(hashKey));
-
-        Map<String, Condition> conditions = ImmutableMap.of(EMRFS_DIR_KEY, hashKeyCondition);
-
-        QueryRequest request = new QueryRequest()
-                .withTableName(configuration.get().get(EMRFS_TABLE_KEY))
-                .withConsistentRead(true)
-                .withKeyConditions(conditions);
-
-        QueryResult result = dynamodbClient.get().query(request);
-        return ImmutableSet.copyOf(result.getItems().stream()
-                .map(item -> item.get(EMRFS_FILE_KEY).getS())
-                .collect(Collectors.toSet()));
-    }
+//    private static Set<String> emrfsList(Path parentPath) {
+//        String hashKey = parentPath.toString().replaceFirst("s3:/", "");
+//
+//        Condition hashKeyCondition = new Condition().withComparisonOperator(ComparisonOperator.EQ)
+//                .withAttributeValueList(new AttributeValue().withS(hashKey));
+//
+//        Map<String, Condition> conditions = ImmutableMap.of(EMRFS_DIR_KEY, hashKeyCondition);
+//
+//        QueryRequest request = new QueryRequest()
+//                .withTableName(configuration.get().get(EMRFS_TABLE_KEY))
+//                .withConsistentRead(true)
+//                .withKeyConditions(conditions);
+//
+//        QueryResult result = dynamodbClient.get().query(request);
+//        return ImmutableSet.copyOf(result.getItems().stream()
+//                .map(item -> item.get(EMRFS_FILE_KEY).getS())
+//                .collect(Collectors.toSet()));
+//    }
 
     public static void cleanDelete(Path path) {
-        try {
-            if (isS3(path)) {
-                FileContext fileContext = FileContext.getFileContext(path.toUri(), configuration.get());
-                fileContext.delete(path, false);
-            }
-        } catch (java.io.IOException e) {
-            logger.error("cleanDelete: {}", path, e);
-        }
+//        try {
+//            if (isS3(path)) {
+//                FileContext fileContext = FileContext.getFileContext(path.toUri(), configuration.get());
+//                fileContext.delete(path, false);
+//            }
+//        } catch (java.io.IOException e) {
+//            logger.error("cleanDelete: {}", path, e);
+//        }
     }
 
     public static void emrfsDelete(Path path) {
-        if (isS3(path) && isEmrfs.get()) {
-            final ImmutableMap<String, String> keys = ImmutableMap.of(EMRFS_DIR_KEY,
-                    path.getParent().toString().replaceFirst("s3:/", ""),
-                    EMRFS_FILE_KEY, path.getName().toString());
-            String tableName = configuration.get().get(EMRFS_TABLE_KEY);
-
-            DeleteItemRequest request = new DeleteItemRequest()
-                    .withTableName(tableName)
-                    .withKey(getDeleteItemKey(path))
-                    .withReturnConsumedCapacity(ReturnConsumedCapacity.TOTAL);
-            dynamodbClient.get().deleteItem(request);
-        }
+//        if (isS3(path) && isEmrfs.get()) {
+//            final ImmutableMap<String, String> keys = ImmutableMap.of(EMRFS_DIR_KEY,
+//                    path.getParent().toString().replaceFirst("s3:/", ""),
+//                    EMRFS_FILE_KEY, path.getName().toString());
+//            String tableName = configuration.get().get(EMRFS_TABLE_KEY);
+//
+//            DeleteItemRequest request = new DeleteItemRequest()
+//                    .withTableName(tableName)
+//                    .withKey(getDeleteItemKey(path))
+//                    .withReturnConsumedCapacity(ReturnConsumedCapacity.TOTAL);
+//            dynamodbClient.get().deleteItem(request);
+//        }
 
     }
 

@@ -92,6 +92,7 @@ public class HoodieClientExample {
                         .withSchema(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA).withParallelism(2, 2)
                         .forTable(tableName).withIndexConfig(
                         HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.BLOOM).build())
+                .withHadoopConfiguration(jsc.hadoopConfiguration())
                         .build();
         HoodieWriteClient client = new HoodieWriteClient(jsc, cfg);
 

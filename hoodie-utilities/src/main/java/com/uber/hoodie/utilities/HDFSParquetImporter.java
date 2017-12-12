@@ -308,6 +308,7 @@ public class HDFSParquetImporter implements Serializable{
             .withParallelism(parallelism, parallelism).withSchema(schemaStr)
             .combineInput(true, true).withIndexConfig(
                 HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.BLOOM).build())
+                .withHadoopConfiguration(jsc.hadoopConfiguration())
             .build();
         return new HoodieWriteClient(jsc, config);
     }

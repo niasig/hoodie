@@ -90,7 +90,9 @@ public class HoodieReadClient implements Serializable {
                 .getHoodieTable(new HoodieTableMetaClient(fs, basePath, true), null);
         this.commitTimeline = hoodieTable.getCompletedCompactionCommitTimeline();
         this.index =
-                new HoodieBloomIndex(HoodieWriteConfig.newBuilder().withPath(basePath).build(), jsc);
+                new HoodieBloomIndex(HoodieWriteConfig.newBuilder().withPath(basePath)
+                        .withHadoopConfiguration(jsc.hadoopConfiguration())
+                        .build(), jsc);
         this.sqlContextOpt = Optional.absent();
     }
 

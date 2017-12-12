@@ -32,9 +32,9 @@ import com.uber.hoodie.table.HoodieTable;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.fs.Path;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 import org.apache.spark.TaskContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -43,7 +43,7 @@ import java.util.Optional;
 
 @SuppressWarnings("Duplicates")
 public class HoodieMergeHandle<T extends HoodieRecordPayload> extends HoodieIOHandle<T> {
-    private static Logger logger = LogManager.getLogger(HoodieMergeHandle.class);
+    private static Logger logger = LoggerFactory.getLogger(HoodieMergeHandle.class);
 
     private WriteStatus writeStatus;
     private HashMap<String, HoodieRecord<T>> keyToNewRecords;
@@ -218,6 +218,7 @@ public class HoodieMergeHandle<T extends HoodieRecordPayload> extends HoodieIOHa
             writeStatus.getStat().setNumUpdateWrites(updatedRecordsWritten);
             writeStatus.getStat().setTotalWriteErrors(writeStatus.getFailedRecords().size());
         } catch (IOException e) {
+            logger.error("close: {}", newFilePath, e);
             throw new HoodieUpsertException("Failed to close UpdateHandle", e);
         }
     }

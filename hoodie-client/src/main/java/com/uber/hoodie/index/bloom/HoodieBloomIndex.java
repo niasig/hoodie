@@ -75,7 +75,7 @@ public class HoodieBloomIndex<T extends HoodieRecordPayload> extends HoodieIndex
 
         // Step 0: cache the input record RDD
         if (config.getBloomIndexUseCaching()) {
-            recordRDD.persist(StorageLevel.MEMORY_AND_DISK_SER());
+            recordRDD.persist(config.getWriteStatusStorageLevel());
         }
 
         // Step 1: Extract out thinner JavaPairRDD of (partitionPath, recordKey)
@@ -87,7 +87,7 @@ public class HoodieBloomIndex<T extends HoodieRecordPayload> extends HoodieIndex
 
         // Cache the result, for subsequent stages.
         if (config.getBloomIndexUseCaching()) {
-            rowKeyFilenamePairRDD.persist(StorageLevel.MEMORY_AND_DISK_SER());
+            rowKeyFilenamePairRDD.persist(config.getWriteStatusStorageLevel());
         }
         if (logger.isDebugEnabled()) {
             long totalTaggedRecords = rowKeyFilenamePairRDD.count();
@@ -141,7 +141,11 @@ public class HoodieBloomIndex<T extends HoodieRecordPayload> extends HoodieIndex
     private JavaPairRDD<String, String> lookupIndex(
             JavaPairRDD<String, String> partitionRecordKeyPairRDD, final HoodieTable<T> hoodieTable) {
         // Obtain records per partition, in the incoming records
-        Map<String, Long> recordsPerPartition = partitionRecordKeyPairRDD.countByKey();
+        Map<String, Long> recordsPerPartition = partitionRecordKeyPairRDD
+                .mapValues(v -> 1L)
+                .reduceByKey((l, r) -> l + r, config.getBloomIndexParallelism())
+                .collectAsMap();
+
         List<String> affectedPartitionPathList = new ArrayList<>(recordsPerPartition.keySet());
 
         // Step 2: Load all involved files as <Partition, filename> pairs

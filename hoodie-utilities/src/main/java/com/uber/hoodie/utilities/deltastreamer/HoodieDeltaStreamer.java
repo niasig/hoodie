@@ -35,6 +35,7 @@ import com.uber.hoodie.common.table.timeline.HoodieInstant;
 import com.uber.hoodie.common.util.FSUtils;
 import com.uber.hoodie.config.HoodieIndexConfig;
 import com.uber.hoodie.config.HoodieWriteConfig;
+import com.uber.hoodie.exception.HoodieIOException;
 import com.uber.hoodie.index.HoodieIndex;
 import com.uber.hoodie.utilities.HiveIncrementalPuller;
 import com.uber.hoodie.utilities.UtilHelpers;
@@ -113,6 +114,8 @@ public class HoodieDeltaStreamer implements Serializable {
      */
     private transient JavaSparkContext jssc;
 
+    private final HoodieWriteConfig hoodieCfg;
+
 
     public HoodieDeltaStreamer(Config cfg) throws IOException {
         this.cfg = cfg;
@@ -130,7 +133,7 @@ public class HoodieDeltaStreamer implements Serializable {
         initSchemaProvider();
         initKeyGenerator();
         this.jssc = getSparkContext();
-
+        this.hoodieCfg = getHoodieClientConfig(cfg.hoodieClientProps);
         initSource();
     }
 
@@ -218,7 +221,6 @@ public class HoodieDeltaStreamer implements Serializable {
 
 
         // Perform the write
-        HoodieWriteConfig hoodieCfg = getHoodieClientConfig(cfg.hoodieClientProps);
         HoodieWriteClient client = new HoodieWriteClient<>(jssc, hoodieCfg);
         String commitTime = client.startCommit();
         log.info("Starting commit  : " + commitTime);
@@ -247,17 +249,22 @@ public class HoodieDeltaStreamer implements Serializable {
         client.close();
     }
 
-    private HoodieWriteConfig getHoodieClientConfig(String hoodieClientCfgPath) throws Exception {
-        return HoodieWriteConfig.newBuilder()
-                .combineInput(true, true)
-                .withPath(cfg.targetBasePath)
-                .withAutoCommit(false)
-                .withSchema(schemaProvider.getTargetSchema().toString())
-                .forTable(cfg.targetTableName)
-                .withIndexConfig(
-                        HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.BLOOM).build())
-                .fromInputStream(fs.open(new Path(hoodieClientCfgPath)))
-                .build();
+    private HoodieWriteConfig getHoodieClientConfig(String hoodieClientCfgPath) {
+        try {
+            return HoodieWriteConfig.newBuilder()
+                    .combineInput(true, true)
+                    .withPath(cfg.targetBasePath)
+                    .withAutoCommit(false)
+                    .withSchema(schemaProvider.getTargetSchema().toString())
+                    .forTable(cfg.targetTableName)
+                    .withIndexConfig(
+                            HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.BLOOM).build())
+                    .fromInputStream(fs.open(new Path(hoodieClientCfgPath)))
+                    .withHadoopConfiguration(jssc.hadoopConfiguration())
+                    .build();
+        } catch (IOException e) {
+            throw new HoodieIOException("getHoodieClientConfig", e);
+        }
     }
 
     private enum Operation {

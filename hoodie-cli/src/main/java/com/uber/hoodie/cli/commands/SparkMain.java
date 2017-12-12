@@ -132,6 +132,7 @@ public class SparkMain {
         HoodieWriteConfig config = HoodieWriteConfig.newBuilder().withPath(basePath)
             .withIndexConfig(
                 HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.BLOOM).build())
+                .withHadoopConfiguration(jsc.hadoopConfiguration())
             .build();
         return new HoodieWriteClient(jsc, config);
     }

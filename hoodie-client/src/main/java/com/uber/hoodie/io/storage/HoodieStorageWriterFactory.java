@@ -25,13 +25,18 @@ import com.uber.hoodie.common.util.FSUtils;
 import com.uber.hoodie.table.HoodieTable;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.IndexedRecord;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.avro.AvroSchemaConverter;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 public class HoodieStorageWriterFactory {
+    private static final Logger logger = LoggerFactory.getLogger(HoodieStorageWriterFactory.class);
+
     public static <T extends HoodieRecordPayload, R extends IndexedRecord> HoodieStorageWriter<R> getStorageWriter(
             String commitTime, Path path, HoodieTable<T> hoodieTable, HoodieWriteConfig config, Schema schema)
         throws IOException {
@@ -47,10 +52,12 @@ public class HoodieStorageWriterFactory {
         HoodieAvroWriteSupport writeSupport =
             new HoodieAvroWriteSupport(new AvroSchemaConverter().convert(schema), schema, filter);
 
+        Configuration conf = FSUtils.getFs(config.getBasePath(), config.hadoopConfiguration()).getConf();
+        logger.debug("newParquetStorageWriter: Base: {} Path {}", config.getBasePath(), path);
         HoodieParquetConfig parquetConfig =
             new HoodieParquetConfig(writeSupport, CompressionCodecName.SNAPPY,
                 config.getParquetBlockSize(), config.getParquetPageSize(),
-                config.getParquetMaxFileSize(), FSUtils.getFs(config.getBasePath()).getConf());
+                config.getParquetMaxFileSize(), conf);
 
         return new HoodieParquetWriter<>(commitTime, path, parquetConfig, schema);
     }

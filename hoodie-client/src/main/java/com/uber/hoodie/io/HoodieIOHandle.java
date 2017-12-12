@@ -28,13 +28,13 @@ import org.apache.avro.Schema;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 public abstract class HoodieIOHandle<T extends HoodieRecordPayload> {
-    private static Logger logger = LogManager.getLogger(HoodieIOHandle.class);
+    private static Logger logger = LoggerFactory.getLogger(HoodieIOHandle.class);
     protected final String commitTime;
     protected final HoodieWriteConfig config;
     protected final FileSystem fs;
@@ -47,7 +47,7 @@ public abstract class HoodieIOHandle<T extends HoodieRecordPayload> {
                           HoodieTable<T> hoodieTable) {
         this.commitTime = commitTime;
         this.config = config;
-        this.fs = FSUtils.getFs(config.getBasePath());
+        this.fs = FSUtils.getFs(config.getBasePath(), config.hadoopConfiguration());
         this.hoodieTable = hoodieTable;
         this.hoodieTimeline = hoodieTable.getCompletedCommitTimeline();
         this.fileSystemView = hoodieTable.getROFileSystemView();
@@ -63,8 +63,10 @@ public abstract class HoodieIOHandle<T extends HoodieRecordPayload> {
             throw new HoodieIOException("Failed to make dir " + path, e);
         }
 
-        return new Path(path.toString(),
+        Path newPath = new Path(path.toString(),
             FSUtils.makeDataFileName(commitTime, taskPartitionId, fileName));
+        logger.debug("makeNewPath {} + {} = {}", config.getBasePath(), partitionPath, newPath);
+        return newPath;
     }
 
     /**

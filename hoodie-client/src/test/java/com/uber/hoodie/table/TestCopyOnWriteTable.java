@@ -418,7 +418,7 @@ public class TestCopyOnWriteTable {
         List<HoodieRecord> records = new ArrayList<>();
         records.addAll(insertRecords);
         records.addAll(updateRecords);
-        WorkloadProfile profile = new WorkloadProfile(jsc.parallelize(records));
+        WorkloadProfile profile = new WorkloadProfile(config, jsc.parallelize(records));
         HoodieCopyOnWriteTable.UpsertPartitioner partitioner = (HoodieCopyOnWriteTable.UpsertPartitioner)
                 table.getUpsertPartitioner(profile);
 

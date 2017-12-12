@@ -18,12 +18,14 @@ package com.uber.hoodie.config;
 
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.uber.hoodie.WriteStatus;
 import com.uber.hoodie.common.model.HoodieCleaningPolicy;
 import com.uber.hoodie.common.util.ReflectionUtils;
 import com.uber.hoodie.index.HoodieIndex;
 import com.uber.hoodie.io.compact.strategy.CompactionStrategy;
 import com.uber.hoodie.metrics.MetricsReporterType;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.spark.storage.StorageLevel;
 
 import javax.annotation.concurrent.Immutable;
@@ -58,9 +60,11 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
     private static final String DEFAULT_ASSUME_DATE_PARTITIONING = "false";
     private static final String HOODIE_WRITE_STATUS_CLASS_PROP = "hoodie.writestatus.class";
     private static final String DEFAULT_HOODIE_WRITE_STATUS_CLASS = WriteStatus.class.getName();
+    private final Map<String, String> hadoopConfiguration;
 
-    private HoodieWriteConfig(Properties props) {
+    private HoodieWriteConfig(Properties props, Map<String, String> hadoopConfiguration) {
         super(props);
+        this.hadoopConfiguration = hadoopConfiguration;
     }
 
     /**
@@ -266,6 +270,12 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
         return props.getProperty(HoodieMetricsConfig.GRAPHITE_METRIC_PREFIX);
     }
 
+    public org.apache.hadoop.conf.Configuration hadoopConfiguration() {
+        Configuration conf = new Configuration();
+        hadoopConfiguration.entrySet().stream().forEach(kv -> conf.set(kv.getKey(), kv.getValue()));
+        return conf;
+    }
+
     public static HoodieWriteConfig.Builder newBuilder() {
         return new Builder();
     }
@@ -279,8 +289,9 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
         private boolean isCompactionConfigSet = false;
         private boolean isMetricsConfigSet = false;
         private boolean isAutoCommit = true;
+        private Map<String, String> hadoopConfiguration = ImmutableMap.of();
 
-        public Builder fromFile(File propertiesFile) throws IOException {
+      public Builder fromFile(File propertiesFile) throws IOException {
             FileReader reader = new FileReader(propertiesFile);
             try {
                 this.props.load(reader);
@@ -380,8 +391,15 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
             return this;
         }
 
+        public Builder withHadoopConfiguration(Configuration conf) {
+            ImmutableMap.Builder<String, String> b = ImmutableMap.builder();
+            conf.iterator().forEachRemaining(kv -> b.put(kv.getKey(), kv.getValue()));
+            this.hadoopConfiguration = b.build();
+            return this;
+        }
+
         public HoodieWriteConfig build() {
-            HoodieWriteConfig config = new HoodieWriteConfig(props);
+            HoodieWriteConfig config = new HoodieWriteConfig(props, hadoopConfiguration);
             // Check for mandatory properties
             Preconditions.checkArgument(config.getBasePath() != null);
             setDefaultOnCondition(props, !props.containsKey(INSERT_PARALLELISM), INSERT_PARALLELISM,

@@ -79,6 +79,7 @@ public class HoodieParquetWriter<T extends HoodieRecordPayload, R extends Indexe
             HoodieWrapperFileSystem.convertToHoodiePath(file, parquetConfig.getHadoopConf());
         this.fs = (HoodieWrapperFileSystem) this.file
             .getFileSystem(registerFileSystem(this.file, parquetConfig.getHadoopConf()));
+        logger.info("init: {} {}", this.file, this.fs.getClass().getCanonicalName());
         // We cannot accurately measure the snappy compressed output file size. We are choosing a conservative 10%
         // TODO - compute this compression ratio dynamically by looking at the bytes written to the stream and the actual file size reported by HDFS
         this.maxFileSize = parquetConfig.getMaxFileSize() + Math
