@@ -85,20 +85,12 @@ class DefaultSource extends RelationProvider
     if (parameters(VIEW_TYPE_OPT_KEY).equals(VIEW_TYPE_INCREMENTAL_OPT_VAL)) {
       new IncrementalRelation(sqlContext, path.get, optParams, schema)
     } else {
-      // this is just effectively RO view only, where `path` can contain a mix of
-      // non-hoodie/hoodie path files. set the path filter up
-      sqlContext.sparkContext.hadoopConfiguration.setClass(
-        "mapreduce.input.pathFilter.class",
-        classOf[com.uber.hoodie.hadoop.HoodieROTablePathFilter],
-        classOf[org.apache.hadoop.fs.PathFilter]);
-
-      // simply return as a regular parquet relation
-      DataSource.apply(
+      // Use hoodie metadata to filter the files
+      HoodieInMemoryFileIndex(
         sparkSession = sqlContext.sparkSession,
-        userSpecifiedSchema = Option(schema),
+        userSpecifiedSchema = schema,
         className = "parquet",
         options = parameters.toMap)
-        .resolveRelation()
     }
   }
 
