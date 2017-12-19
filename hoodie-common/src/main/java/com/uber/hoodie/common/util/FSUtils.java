@@ -20,12 +20,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
+import com.google.common.collect.ImmutableList;
 import com.uber.hoodie.common.model.HoodieLogFile;
 import com.uber.hoodie.common.model.HoodiePartitionMetadata;
 import com.uber.hoodie.common.table.timeline.HoodieInstant;
 import com.uber.hoodie.exception.HoodieException;
 import com.uber.hoodie.exception.HoodieIOException;
 import com.uber.hoodie.exception.InvalidHoodiePathException;
+import com.uber.hoodie.hadoop.HoodieROFileCache;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -45,6 +47,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -123,9 +126,8 @@ public class FSUtils {
         return fullFileName.split("_")[2].split("\\.")[0];
     }
 
-    public static String getCommitTimeFromPath(String path) {
-        String[] split = path.split("_");
-        return split[split.length - 1].split("\\.")[0];
+    public static String getCommitTimeFromPath(Path path) {
+        return getCommitTime(path.getName());
     }
 
     public static long getFileSize(FileSystem fs, Path path) throws IOException {
@@ -153,7 +155,7 @@ public class FSUtils {
     }
 
     public static String getRelativePartitionPath(Path basePath, Path partitionPath) {
-        String partitionFullPath = partitionPath.toString();
+        String partitionFullPath = partitionPath.toUri().toString();
         int partitionStartIndex = partitionFullPath.lastIndexOf(basePath.getName());
         return partitionFullPath.substring(partitionStartIndex + basePath.getName().length() + 1);
     }
@@ -181,13 +183,12 @@ public class FSUtils {
         return partitions;
     }
 
+    // This is actually only reading the partitions that are listed in one or more of the commit files.  It is
+    // suitable for clean operation but does not actually give the complete info.
     public static List<String> getAllPartitionPaths(FileSystem fs, String basePathStr, boolean assumeDatePartitioning)
             throws IOException {
-       if (assumeDatePartitioning) {
-           return getAllFoldersThreeLevelsDown(fs, basePathStr);
-       } else {
-           return getAllFoldersWithPartitionMetaFile(fs, basePathStr);
-       }
+        HoodieROFileCache hoodieFileCache = new HoodieROFileCache(fs, basePathStr);
+        return ImmutableList.copyOf(hoodieFileCache.getPartitionPaths());
     }
 
     public static String getFileExtension(String fullName) {

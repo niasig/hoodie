@@ -30,14 +30,11 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -47,20 +44,22 @@ import java.util.stream.Stream;
  * hoodie parquet files.
  */
 public class HoodieROFileCache implements PathFilter, Serializable {
+    public static final org.slf4j.Logger LOG = LoggerFactory.getLogger(HoodieROFileCache.class);
+
     private static final String SEPERATOR = "/";
 
-    private final Map<Pair<String, String>, String> fileToTimestamp;
-    private final Set<String> folders;
+    private final Map<Pair<String, String>, String> fileToTimestamp = new HashMap<>();
+    private final Set<String> folders = new HashSet<>();
+    private final Set<String> partitionPaths = new HashSet<>();
     private final List<String> partitionColumns;
-    private String latestCommitTime;
+    private String latestCommitTime = "0";
+    private final String baseDir;
 
     public HoodieROFileCache(FileSystem fs, String baseDir) {
-        if (HoodieROTablePathFilter.LOG.isDebugEnabled()) {
-            HoodieROTablePathFilter.LOG.debug("Loading HoodieROFileCache for " + baseDir);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Loading HoodieROFileCache for " + baseDir);
         }
-        fileToTimestamp = new HashMap<>();
-        folders = new HashSet<>();
-        latestCommitTime = "0";
+        this.baseDir = baseDir;
 
         HoodieTableMetaClient metaClient = new HoodieTableMetaClient(fs, baseDir);
 
@@ -78,10 +77,11 @@ public class HoodieROFileCache implements PathFilter, Serializable {
             for (Map.Entry<String, String> entry : hoodieCommitMetadata.getFileIdAndRelativePaths().entrySet()) {
                 String fileId = entry.getKey();
                 String relativePath = entry.getValue();
-                String commitTime = FSUtils.getCommitTimeFromPath(relativePath);
+                String fullPath = baseDir + SEPERATOR + relativePath;
+                String commitTime = FSUtils.getCommitTimeFromPath(new Path(fullPath));
                 String relativePartitionPath = FSUtils.getPartitionPath(relativePath);
-                String fileFolder = addFolders(baseDir, relativePartitionPath);
-                Pair<String, String> key = Pair.of(fileId, fileFolder);
+                addFolders(relativePartitionPath);
+                Pair<String, String> key = toKey(fullPath);
                 String maxCommitTime = fileToTimestamp.putIfAbsent(key, commitTime);
                 if (maxCommitTime != null && HoodieTimeline.compareTimestamps(commitTime, maxCommitTime, HoodieTimeline.GREATER)) {
                     fileToTimestamp.put(key, commitTime);
@@ -94,14 +94,21 @@ public class HoodieROFileCache implements PathFilter, Serializable {
         });
     }
 
-    private String addFolders(String baseDir, String relativeParitionPath) {
+    private void addFolders(String relativeParitionPath) {
         String path = baseDir;
         folders.add(path);
         for (String relativePath : relativeParitionPath.split(SEPERATOR)) {
             path += SEPERATOR + relativePath;
             folders.add(path);
         }
-        return path;
+        partitionPaths.add(relativeParitionPath);
+    }
+
+    private Pair<String, String> toKey(String fullPath) {
+        Path path = new Path(fullPath);
+        String fileId = FSUtils.getFileId(path.getName());
+        String parentPath = path.getParent().toString();
+        return Pair.of(fileId, parentPath);
     }
 
     private List<String> getPartitionColumns(HoodieTimeline timeline) {
@@ -127,14 +134,12 @@ public class HoodieROFileCache implements PathFilter, Serializable {
 
     public boolean accept(Path path) {
         if (FSUtils.isDataFile(path.toString()) && !fileToTimestamp.isEmpty()) {
-            String name = path.getName();
-            String fileId = FSUtils.getFileId(name);
-            String fileCommitTime = FSUtils.getCommitTime(name);
-            String partitionPath = FSUtils.getPartitionPath(path.toString());
-            Pair<String, String> key = Pair.of(fileId, partitionPath);
+            String pathStr = path.toString();
+            Pair<String, String> key = toKey(pathStr);
+            String fileCommitTime = FSUtils.getCommitTimeFromPath(path);
             String maxCommitTime = fileToTimestamp.get(key);
             if (maxCommitTime == null) {
-                return HoodieTimeline.compareTimestamps(fileCommitTime, latestCommitTime, HoodieTimeline.LESSER_OR_EQUAL);
+                return HoodieTimeline.compareTimestamps(fileCommitTime, latestCommitTime, HoodieTimeline.LESSER);
             } else {
                 return StringUtils.equals(fileCommitTime, maxCommitTime);
             }
@@ -145,5 +150,8 @@ public class HoodieROFileCache implements PathFilter, Serializable {
 
     public List<String> getPartitionColumns() {
         return partitionColumns;
+    }
+    public Collection<String> getPartitionPaths() { return
+            folders;
     }
 }
