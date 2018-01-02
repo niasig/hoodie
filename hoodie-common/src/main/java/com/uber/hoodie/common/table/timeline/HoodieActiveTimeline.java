@@ -83,7 +83,8 @@ public final class HoodieActiveTimeline extends HoodieDefaultTimeline {
     protected HoodieActiveTimeline(FileSystem fs, String metaPath, String[] includedExtensions) {
         // Filter all the filter in the metapath and include only the extensions passed and
         // convert them into HoodieInstant
-        this.isS3 = fs.getScheme().toLowerCase().startsWith("s3");
+        this.isS3 = FSUtils.isS3(fs);
+        log.info(fs.getClass().getCanonicalName() + ": " + isS3);
         try {
             this.instants =
                 Arrays.stream(HoodieTableMetaClient.scanFiles(fs, new Path(metaPath), path -> {
@@ -98,6 +99,7 @@ public final class HoodieActiveTimeline extends HoodieDefaultTimeline {
             log.info("Loaded instants " + instants);
             this.fileContext = FileContext.getFileContext(fs.getUri(), fs.getConf());
         } catch (Exception e) {
+            log.error("Failed to scan metadata " + metaPath, e);
             throw new HoodieException("Failed to scan metadata", e);
         }
         this.fs = fs;

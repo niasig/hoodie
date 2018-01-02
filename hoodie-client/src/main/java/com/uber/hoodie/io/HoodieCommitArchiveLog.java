@@ -91,6 +91,7 @@ public class HoodieCommitArchiveLog {
         try {
             if(this.writer != null) {
                 this.writer.close();
+                this.writer = null;
             }
         } catch(IOException e) {
             throw new HoodieException("Unable to close HoodieLogFormat writer", e);

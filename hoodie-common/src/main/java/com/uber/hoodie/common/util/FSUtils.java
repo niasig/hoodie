@@ -383,4 +383,11 @@ public class FSUtils {
         return sizeInBytes / (1024 * 1024);
     }
 
+    public static String getScheme(FileSystem fs) {
+        return fs.getUri().getScheme();
+    }
+
+    public static boolean isS3(FileSystem fs) {
+        return getScheme(fs).toLowerCase().startsWith("s3");
+    }
 }

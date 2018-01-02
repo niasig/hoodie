@@ -93,7 +93,7 @@ public class HoodiePartitionMetadata {
         Path tmpMetaPath = new Path(partitionPath, HoodiePartitionMetadata.HOODIE_PARTITION_METAFILE + "_" + taskPartitionId);
         Path metaPath = new Path(partitionPath, HoodiePartitionMetadata.HOODIE_PARTITION_METAFILE);
         boolean metafileExists = false;
-        boolean isS3 = fs.getScheme().toLowerCase().startsWith("s3");
+        boolean isS3 = FSUtils.isS3(fs);
 
         try {
             metafileExists = fs.exists(metaPath);

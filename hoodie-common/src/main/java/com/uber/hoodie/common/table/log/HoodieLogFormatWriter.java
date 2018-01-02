@@ -16,8 +16,6 @@
 
 package com.uber.hoodie.common.table.log;
 
-import com.google.common.base.Preconditions;
-
 import com.uber.hoodie.common.model.HoodieLogFile;
 import com.uber.hoodie.common.table.log.HoodieLogFormat.Writer;
 import com.uber.hoodie.common.table.log.HoodieLogFormat.WriterBuilder;
@@ -25,6 +23,8 @@ import com.uber.hoodie.common.table.log.block.HoodieLogBlock;
 import com.uber.hoodie.common.util.FSUtils;
 import com.uber.hoodie.exception.HoodieException;
 import java.io.IOException;
+
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -70,7 +70,7 @@ public class HoodieLogFormatWriter implements HoodieLogFormat.Writer {
     if (fs.exists(path)) {
       log.info(logFile + " exists. Appending to existing file");
       try {
-        this.output = fs.append(path, bufferSize);
+        this.output = append(fs, path, bufferSize);
       } catch (RemoteException e) {
         // this happens when either another task executor writing to this file died or data node is going down
         if (e.getClassName().equals(AlreadyBeingCreatedException.class.getName())
@@ -79,7 +79,7 @@ public class HoodieLogFormatWriter implements HoodieLogFormat.Writer {
           if (FSUtils.recoverDFSFileLease((DistributedFileSystem) fs, path)) {
             log.warn("Recovered lease on path " + path);
             // try again
-            this.output = fs.append(path, bufferSize);
+            this.output = append(fs, path, bufferSize);
           } else {
             log.warn("Failed to recover lease on path " + path);
             throw new HoodieException(e);
@@ -92,6 +92,22 @@ public class HoodieLogFormatWriter implements HoodieLogFormat.Writer {
       this.output = fs.create(path, false, bufferSize, replication,
           WriterBuilder.DEFAULT_SIZE_THRESHOLD, null);
       // TODO - append a file level meta block
+    }
+  }
+
+  private static FSDataOutputStream append(FileSystem fs, Path path, int bufferSize) throws IOException {
+    if (FSUtils.isS3(fs)) {
+      byte [] buf = new byte[bufferSize];
+      FSDataInputStream orig = fs.open(path, bufferSize);
+      FSDataOutputStream out = fs.create(path, true, bufferSize);
+      int lenRead;
+      while ((lenRead = orig.read(buf)) > 0) {
+        out.write(buf, 0, lenRead);
+      }
+      log.info(path.toString() + " using s3 append to " + out);
+      return out;
+    } else {
+      return fs.append(path, bufferSize);
     }
   }
 

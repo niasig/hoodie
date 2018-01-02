@@ -16,6 +16,7 @@
 
 package com.uber.hoodie.io.storage;
 
+import com.uber.hoodie.common.util.FSUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.permission.AclEntry;
@@ -666,8 +667,8 @@ public class HoodieWrapperFileSystem extends FileSystem {
 
     public static Path convertToHoodiePath(Path file, Configuration conf) {
         try {
-            String scheme = file.getFileSystem(conf).getScheme();
-        return convertPathWithScheme(file, getHoodieScheme(scheme));
+            String scheme = FSUtils.getScheme(file.getFileSystem(conf));
+            return convertPathWithScheme(file, getHoodieScheme(scheme));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -675,9 +676,8 @@ public class HoodieWrapperFileSystem extends FileSystem {
 
     private Path convertToDefaultPath(Path oldPath) {
         try {
-            String newScheme = oldPath
-                    .getFileSystem(conf)
-                    .getScheme()
+            String newScheme = FSUtils.getScheme(oldPath
+                    .getFileSystem(conf))
                     .replaceFirst(HOODIE_SCHEME_PREFIX, "");
             Path newPath = convertPathWithScheme(oldPath, newScheme);
             logger.debug("convertToDefaultPath: {} => {}", oldPath, newPath);
