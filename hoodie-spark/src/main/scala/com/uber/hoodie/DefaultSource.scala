@@ -188,6 +188,7 @@ class DefaultSource extends RelationProvider
     // Create a HoodieWriteClient & issue the write.
     val client = DataSourceUtils.createHoodieClient(new JavaSparkContext(sqlContext.sparkContext),
       schema.toString,
+      df.schema,
       path.get,
       tblName.get,
       mapAsJavaMap(parameters)

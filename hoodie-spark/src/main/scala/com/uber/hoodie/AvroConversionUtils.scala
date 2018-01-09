@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.sql.{Date, Timestamp}
 import java.util
 
-import com.databricks.spark.avro.SchemaConverters
+import com.databricks.spark.avro.SparkAvroSchemaConverters
 import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.generic.GenericRecord
 import org.apache.avro.{Schema, SchemaBuilder}
@@ -29,6 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 
+import scala.collection.JavaConverters._
 
 object AvroConversionUtils {
 
@@ -43,9 +44,48 @@ object AvroConversionUtils {
     }
   }
 
-  def createConverterToAvro(dataType: DataType,
+  def createConverterToAvro(structType: StructType,
                             structName: String,
-                            recordNamespace: String): (Any) => Any = {
+                            recordNamespace: String
+                           ): (Any) => Any = {
+    val builder = SchemaBuilder.record(structName).namespace(recordNamespace)
+    val schema: Schema = SparkAvroSchemaConverters.convertStructToAvro(
+      structType, builder, recordNamespace)
+    createStructConverterToAvro(structType, structName, schema)
+  }
+
+  def createStructConverterToAvro(structType: StructType,
+                            structName: String,
+                                  schema: Schema
+                           ): (Any) => Any = {
+    val fieldConverters = structType.fields.zip(schema.getFields.asScala).map {
+      case (sparkField, avroField) =>
+        createFieldConverterToAvro(sparkField.dataType, sparkField.name, schema, avroField)
+    }
+    (item: Any) => {
+      if (item == null) {
+        null
+      } else {
+        val record = new Record(schema)
+        val convertersIterator = fieldConverters.iterator
+        val fieldNamesIterator = structType.fieldNames.iterator
+        val rowIterator = item.asInstanceOf[Row].toSeq.iterator
+
+        while (convertersIterator.hasNext) {
+          val converter = convertersIterator.next()
+          record.put(fieldNamesIterator.next(), converter(rowIterator.next()))
+        }
+        record
+      }
+    }
+  }
+
+  def createFieldConverterToAvro(dataType: DataType,
+                                 structName: String,
+                                  schema: Schema,
+                                 avroField: Schema.Field
+                                 ): (Any) => Any = {
+    val recordNamespace = schema.getNamespace
     dataType match {
       case BinaryType => (item: Any) => item match {
         case null => null
@@ -54,12 +94,10 @@ object AvroConversionUtils {
       case ByteType | ShortType | IntegerType | LongType |
            FloatType | DoubleType | StringType | BooleanType => identity
       case _: DecimalType => (item: Any) => if (item == null) null else item.toString
-      case TimestampType => (item: Any) =>
-        if (item == null) null else item.asInstanceOf[Timestamp].getTime
-      case DateType => (item: Any) =>
-        if (item == null) null else item.asInstanceOf[Date].getTime
+      case TimestampType => (item: Any) => if (item == null) null else item.asInstanceOf[Timestamp].getTime
+      case DateType => (item: Any) => if (item == null) null else item.asInstanceOf[Date].getTime
       case ArrayType(elementType, _) =>
-        val elementConverter = createConverterToAvro(elementType, structName, recordNamespace)
+        val elementConverter = createFieldConverterToAvro(elementType, structName, schema, avroField)
         (item: Any) => {
           if (item == null) {
             null
@@ -76,7 +114,7 @@ object AvroConversionUtils {
           }
         }
       case MapType(StringType, valueType, _) =>
-        val valueConverter = createConverterToAvro(valueType, structName, recordNamespace)
+        val valueConverter = createFieldConverterToAvro(valueType, structName, schema, avroField)
         (item: Any) => {
           if (item == null) {
             null
@@ -89,38 +127,27 @@ object AvroConversionUtils {
           }
         }
       case structType: StructType =>
-        val builder = SchemaBuilder.record(structName).namespace(recordNamespace)
-        val schema: Schema = SchemaConverters.convertStructToAvro(
-          structType, builder, recordNamespace)
-        val fieldConverters = structType.fields.map(field =>
-          createConverterToAvro(field.dataType, field.name, recordNamespace))
-        (item: Any) => {
-          if (item == null) {
-            null
-          } else {
-            val record = new Record(schema)
-            val convertersIterator = fieldConverters.iterator
-            val fieldNamesIterator = dataType.asInstanceOf[StructType].fieldNames.iterator
-            val rowIterator = item.asInstanceOf[Row].toSeq.iterator
-
-            while (convertersIterator.hasNext) {
-              val converter = convertersIterator.next()
-              record.put(fieldNamesIterator.next(), converter(rowIterator.next()))
-            }
-            record
-          }
-        }
+        val structSchema = getRecordSchema(avroField.schema())
+        createStructConverterToAvro(structType, structName, structSchema)
     }
   }
 
+  private def getRecordSchema(schema: Schema): Schema = {
+    schema.getType match {
+      case Schema.Type.UNION => getRecordSchema(schema.getTypes.get(0))
+      case Schema.Type.ARRAY => getRecordSchema(schema.getElementType)
+      case Schema.Type.MAP => getRecordSchema(schema.getValueType)
+      case Schema.Type.RECORD => schema
+    }
+  }
   def convertStructTypeToAvroSchema(structType: StructType,
                                     structName: String,
                                     recordNamespace: String) : Schema = {
     val builder = SchemaBuilder.record(structName).namespace(recordNamespace)
-    SchemaConverters.convertStructToAvro(structType, builder, recordNamespace)
+    SparkAvroSchemaConverters.convertStructToAvro(structType, builder, recordNamespace)
   }
 
   def convertAvroSchemaToStructType(avroSchema: Schema) : StructType = {
-    SchemaConverters.toSqlType(avroSchema).dataType.asInstanceOf[StructType];
+    SparkAvroSchemaConverters.toSqlType(avroSchema).dataType.asInstanceOf[StructType];
   }
 }

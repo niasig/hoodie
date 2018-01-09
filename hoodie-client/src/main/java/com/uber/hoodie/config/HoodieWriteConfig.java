@@ -43,6 +43,7 @@ import java.util.Properties;
 public class HoodieWriteConfig extends DefaultHoodieConfig {
     private static final String BASE_PATH_PROP = "hoodie.base.path";
     private static final String AVRO_SCHEMA = "hoodie.avro.schema";
+    private static final String SPARK_SCHEMA = "hoodie.spark.schema";
     public static final String TABLE_NAME = "hoodie.table.name";
     private static final String DEFAULT_PARALLELISM = "200";
     private static final String INSERT_PARALLELISM = "hoodie.insert.shuffle.parallelism";
@@ -76,6 +77,10 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
 
     public String getSchema() {
         return props.getProperty(AVRO_SCHEMA);
+    }
+
+    public String getSparkSchema() {
+        return props.getProperty(SPARK_SCHEMA);
     }
 
     public String getTableName() {
@@ -324,6 +329,11 @@ public class HoodieWriteConfig extends DefaultHoodieConfig {
             props.setProperty(AVRO_SCHEMA, schemaStr);
             return this;
         }
+
+      public Builder withSparkSchema(String sparkSchemaStr) {
+          props.setProperty(SPARK_SCHEMA, sparkSchemaStr);
+          return this;
+      }
 
         public Builder forTable(String tableName) {
             props.setProperty(TABLE_NAME, tableName);

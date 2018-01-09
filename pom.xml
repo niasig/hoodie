@@ -76,7 +76,7 @@
             <name>Omkar Joshi</name>
             <organization>Uber</organization>
         </contributor>
-         <contributor>
+        <contributor>
             <name>Zeeshan Qureshi</name>
             <organization>Shopify</organization>
         </contributor>
@@ -176,7 +176,8 @@
                     <!-- Sets the VM argument line used when unit tests are run. -->
                     <argLine>${surefireArgLine}</argLine>
                     <systemPropertyVariables>
-                        <log4j.configuration>file:${project.build.testOutputDirectory}/log4j-surefire.properties</log4j.configuration>
+                        <log4j.configuration>file:${project.build.testOutputDirectory}/log4j-surefire.properties
+                        </log4j.configuration>
                     </systemPropertyVariables>
                     <!-- Excludes integration tests when unit tests are run. -->
                     <excludes>
@@ -240,30 +241,30 @@
                     </executions>
                 </plugin>
                 <!--<plugin>-->
-                    <!--<groupId>org.codehaus.mojo</groupId>-->
-                    <!--<artifactId>cobertura-maven-plugin</artifactId>-->
-                    <!--<version>2.7</version>-->
-                    <!--<configuration>-->
-                        <!--<formats>-->
-                            <!--<format>html</format>-->
-                            <!--<format>xml</format>-->
-                        <!--</formats>-->
-                    <!--</configuration>-->
-                    <!--<executions>-->
-                        <!--<execution>-->
-                            <!--<phase>test</phase>-->
-                            <!--<goals>-->
-                                <!--<goal>cobertura</goal>-->
-                            <!--</goals>-->
-                        <!--</execution>-->
-                    <!--</executions>-->
-                    <!--<dependencies>-->
-                        <!--<dependency>-->
-                            <!--<groupId>org.ow2.asm</groupId>-->
-                            <!--<artifactId>asm</artifactId>-->
-                            <!--<version>5.0.3</version>-->
-                        <!--</dependency>-->
-                    <!--</dependencies>-->
+                <!--<groupId>org.codehaus.mojo</groupId>-->
+                <!--<artifactId>cobertura-maven-plugin</artifactId>-->
+                <!--<version>2.7</version>-->
+                <!--<configuration>-->
+                <!--<formats>-->
+                <!--<format>html</format>-->
+                <!--<format>xml</format>-->
+                <!--</formats>-->
+                <!--</configuration>-->
+                <!--<executions>-->
+                <!--<execution>-->
+                <!--<phase>test</phase>-->
+                <!--<goals>-->
+                <!--<goal>cobertura</goal>-->
+                <!--</goals>-->
+                <!--</execution>-->
+                <!--</executions>-->
+                <!--<dependencies>-->
+                <!--<dependency>-->
+                <!--<groupId>org.ow2.asm</groupId>-->
+                <!--<artifactId>asm</artifactId>-->
+                <!--<version>5.0.3</version>-->
+                <!--</dependency>-->
+                <!--</dependencies>-->
                 <!--</plugin>-->
                 <plugin>
                     <!-- excludes are inherited -->
@@ -306,9 +307,32 @@
                             </goals>
                             <configuration>
                                 <sourceDirectory>${project.basedir}/src/main/avro/</sourceDirectory>
-                                <outputDirectory>${project.build.directory}/generated-sources/src/main/java/</outputDirectory>
+                                <outputDirectory>${project.build.directory}/generated-sources/src/main/java/
+                                </outputDirectory>
                                 <stringType>String</stringType>
                             </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>net.alchim31.maven</groupId>
+                    <artifactId>scala-maven-plugin</artifactId>
+                    <version>3.3.1</version>
+                    <executions>
+                        <execution>
+                            <id>scala-compile-first</id>
+                            <phase>process-resources</phase>
+                            <goals>
+                                <goal>add-source</goal>
+                                <goal>compile</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>scala-test-compile</id>
+                            <phase>process-test-resources</phase>
+                            <goals>
+                                <goal>testCompile</goal>
+                            </goals>
                         </execution>
                     </executions>
                 </plugin>
@@ -416,19 +440,19 @@
             <!-- Storage formats -->
             <!-- Spark parquet version 1.7.0 does not play well with the hive 1.1.0 installed in cluster (which requires twitter parquet 1.5.0) -->
             <!--<dependency>-->
-                <!--<groupId>com.twitter</groupId>-->
-                <!--<artifactId>parquet-hadoop-bundle</artifactId>-->
-                <!--<version>1.5.0-cdh5.7.2</version>-->
+            <!--<groupId>com.twitter</groupId>-->
+            <!--<artifactId>parquet-hadoop-bundle</artifactId>-->
+            <!--<version>1.5.0-cdh5.7.2</version>-->
             <!--</dependency>-->
             <!--<dependency>-->
-                <!--<groupId>com.twitter</groupId>-->
-                <!--<artifactId>parquet-hive-bundle</artifactId>-->
-                <!--<version>1.5.0</version>-->
+            <!--<groupId>com.twitter</groupId>-->
+            <!--<artifactId>parquet-hive-bundle</artifactId>-->
+            <!--<version>1.5.0</version>-->
             <!--</dependency>-->
             <!--<dependency>-->
-                <!--<groupId>com.twitter</groupId>-->
-                <!--<artifactId>parquet-avro</artifactId>-->
-                <!--<version>1.5.0-cdh5.7.2</version>-->
+            <!--<groupId>com.twitter</groupId>-->
+            <!--<artifactId>parquet-avro</artifactId>-->
+            <!--<version>1.5.0-cdh5.7.2</version>-->
             <!--</dependency>-->
 
             <dependency>
@@ -590,6 +614,11 @@
                 <artifactId>kryo</artifactId>
                 <version>4.0.0</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.scala-lang</groupId>
+                <artifactId>scala-library</artifactId>
+                <version>${scala.version}</version>
             </dependency>
         </dependencies>
 

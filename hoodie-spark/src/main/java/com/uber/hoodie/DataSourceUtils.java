@@ -32,6 +32,8 @@ import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang3.reflect.ConstructorUtils;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SparkSchemaUtils;
+import org.apache.spark.sql.types.StructType;
 
 import java.io.IOException;
 import java.util.List;
@@ -101,6 +103,7 @@ public class DataSourceUtils {
 
     public static HoodieWriteClient createHoodieClient(JavaSparkContext jssc,
                                                        String schemaStr,
+                                                       StructType sparkSchema,
                                                        String basePath,
                                                        String tblName,
                                                        Map<String, String> parameters) throws Exception {
@@ -109,6 +112,7 @@ public class DataSourceUtils {
                 .withPath(basePath)
                 .withAutoCommit(false)
                 .withSchema(schemaStr)
+                .withSparkSchema(SparkSchemaUtils.sparkSchemaToString(sparkSchema))
                 .forTable(tblName)
                 .withIndexConfig(
                         HoodieIndexConfig.newBuilder()
